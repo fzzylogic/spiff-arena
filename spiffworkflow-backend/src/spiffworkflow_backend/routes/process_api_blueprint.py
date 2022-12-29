@@ -982,7 +982,8 @@ def _get_process_instance(
     name_of_file_with_diagram = None
     if process_identifier:
         spec_reference = SpecReferenceCache.query.filter_by(
-            identifier=process_identifier
+            identifier=process_identifier,
+            type="process"
         ).first()
         if spec_reference is None:
             raise SpecReferenceNotFoundError(

@@ -323,6 +323,10 @@ class AuthorizationService:
             "status",
             "authentication_callback",
             "github_webhook_receive",
+
+            # swagger-ui endpoints for restx
+            "specs",
+            "render_doc",
         ]
         if request.method == "OPTIONS":
             return True
@@ -334,6 +338,7 @@ class AuthorizationService:
         if not request.endpoint:
             return True
 
+        # import pdb; pdb.set_trace()
         api_view_function = current_app.view_functions[request.endpoint]
         module = inspect.getmodule(api_view_function)
         if (

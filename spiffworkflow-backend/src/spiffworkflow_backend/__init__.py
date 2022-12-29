@@ -1,7 +1,10 @@
 """__init__."""
 import os
+from flask import jsonify
+from flask import make_response
 from typing import Any
 
+from flask_restx import Api, Resource, fields
 import connexion  # type: ignore
 import flask.app
 import flask.json
@@ -13,7 +16,8 @@ from flask_bpmn.api.api_error import api_error_blueprint
 from flask_bpmn.models.db import db
 from flask_bpmn.models.db import migrate
 from flask_cors import CORS  # type: ignore
-from flask_mail import Mail  # type: ignore
+from flask_mail import Mail
+from spiffworkflow_backend.models.task import Task  # type: ignore
 from werkzeug.exceptions import NotFound
 
 import spiffworkflow_backend.load_database_models  # noqa: F401
@@ -30,6 +34,8 @@ from spiffworkflow_backend.services.authorization_service import AuthorizationSe
 from spiffworkflow_backend.services.background_processing_service import (
     BackgroundProcessingService,
 )
+
+from spiffworkflow_backend.routes.process_groups import api as process_groups_api
 
 
 class MyJSONEncoder(DefaultJSONProvider):
@@ -119,6 +125,27 @@ def create_app() -> flask.app.Flask:
     CORS(app, origins=origins_re, max_age=3600)
 
     connexion_app.add_api("api.yml", base_path=V1_API_PATH_PREFIX)
+
+    app.config['RESTX_VALIDATE'] = True
+    restplus_app = Api(
+        app,
+        title="HEY",
+        security={'OAuth2': ['read', 'write']},
+        authorizations={
+            'OAuth2': {
+                'type': 'oauth2',
+                'flow': 'implicit',
+                'authorizationUrl': app.config['OPEN_ID_SERVER_URL'],
+                # 'authorizationUrl': "http://localhost:7000/v1.0/login",
+                'clientId': app.config['OPEN_ID_CLIENT_ID'],
+                'scopes': {
+                    'openid': 'Get ID token',
+                    'profile': 'Get identity',
+                }
+            }
+        }
+    )
+    restplus_app.add_namespace(process_groups_api, path='/v1.0/process-groups')
 
     mail = Mail(app)
     app.config["MAIL_APP"] = mail

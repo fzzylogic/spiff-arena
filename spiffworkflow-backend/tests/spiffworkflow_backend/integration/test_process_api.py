@@ -634,6 +634,7 @@ class TestProcessApi(BaseTest):
             "/v1.0/process-groups",
             headers=self.logged_in_headers(with_super_admin_user),
         )
+        assert response.status_code == 200
         assert response.json is not None
         assert len(response.json["results"]) == 5
         assert response.json["pagination"]["count"] == 5
