@@ -16,7 +16,7 @@ from flask import make_response
 from flask.wrappers import Response
 from werkzeug.datastructures import FileStorage
 
-# from SpiffWorkflow.bpmn.specs.events.event_definitions import TimerEventDefinition
+from SpiffWorkflow.bpmn.specs.events.event_definitions import TimerEventDefinition
 
 from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.interfaces import IdToProcessGroupMapping
@@ -593,26 +593,17 @@ def _create_or_update_process_model_file(
             )
         ) from exception
 
-    # # full_file_path = SpecFileService.full_file_path(process_model, request_file.filename)
-    # # file = SpecFileService.to_file_object(file_name, full_file_path)
-    # # spec_stuff = ProcessInstanceProcessor.get_spec([file], process_model)[0]
-    # spec_stuff = ProcessInstanceProcessor.get_process_model_and_subprocesses(process_model_identifier)[0]
-    # time = ''
-    # if spec_stuff.task_specs['StartEvent_1'].event_definition.event_type == 'Timer':
-    #     time = spec_stuff.task_specs['StartEvent_1'].event_definition.dateTime
-    # elif spec_stuff.task_specs['StartEvent_1'].event_definition.event_type == 'Cycle':
-    #     time = spec_stuff.task_specs['StartEvent_1'].event_definition.cycle_definition
-    # # print(f"time: {time}")
-    # print(f"spec_stuff: {spec_stuff}")
-
-    # won't need to evaluate python on a start event that can't set any python
-    # expression = my_task.workflow.script_engine.evaluate(my_task, self.expression)
-    # cycles, start, duration = TimerEventDefinition.parse_iso_recurring_interval(expression)
-    # event_value = {'cycles': cycles, 'next': start.isoformat(), 'duration': duration.total_seconds()}
-
-    # cycles, start, duration = TimerEventDefinition.parse_iso_recurring_interval(time)
-    # event_value = {'cycles': cycles, 'next': start.isoformat(), 'duration': duration.total_seconds()}
-    # print(f"event_value: {event_value}")
+    spec_stuff = ProcessInstanceProcessor.get_process_model_and_subprocesses(process_model_identifier)[0]
+    time = ''
+    print(f"spec_stuff.task_specs['StartEvent_1'].event_definition.event_type: {spec_stuff.task_specs['StartEvent_1'].event_definition.event_type}")
+    time = spec_stuff.task_specs['StartEvent_1'].event_definition.expression
+    if spec_stuff.task_specs['StartEvent_1'].event_definition.event_type == 'Time Date Timer':
+        start = TimerEventDefinition.parse_time_or_duration(time)
+        print(f"start: {start.__class__.__name__}")
+    elif spec_stuff.task_specs['StartEvent_1'].event_definition.event_type == 'Cycle Timer':
+        cycles, start, duration = TimerEventDefinition.parse_iso_recurring_interval(time)
+        event_value = {'cycles': cycles, 'next': start.isoformat(), 'duration': duration.total_seconds()}
+        print(f"event_value: {event_value}")
 
     file_contents = SpecFileService.get_data(process_model, file.name)
     file.file_contents = file_contents
