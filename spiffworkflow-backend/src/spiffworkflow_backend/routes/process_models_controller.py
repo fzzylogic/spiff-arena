@@ -14,6 +14,7 @@ from flask import g
 from flask import jsonify
 from flask import make_response
 from flask.wrappers import Response
+from spiffworkflow_backend.services.process_instance_processor import ProcessInstanceProcessor
 from werkzeug.datastructures import FileStorage
 
 from spiffworkflow_backend.exceptions.api_error import ApiError
@@ -589,6 +590,9 @@ def _create_or_update_process_model_file(
                 status_code=400,
             )
         ) from exception
+
+    spec_stuff = ProcessInstanceProcessor.get_process_model_and_subprocesses(process_model_identifier)[0]
+    print(f"spec_stuff: {spec_stuff}")
     file_contents = SpecFileService.get_data(process_model, file.name)
     file.file_contents = file_contents
     file.process_model_id = process_model.id
