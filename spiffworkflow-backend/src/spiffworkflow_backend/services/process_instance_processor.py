@@ -89,7 +89,10 @@ from spiffworkflow_backend.services.service_task_service import ServiceTaskDeleg
 from spiffworkflow_backend.services.spec_file_service import SpecFileService
 from spiffworkflow_backend.services.user_service import UserService
 
+from spiffworkflow_backend.data_stores.secret_data_store import SecretDataStoreConverter
+
 SPIFF_SPEC_CONFIG["task_specs"].append(BusinessRuleTaskConverter)
+SPIFF_SPEC_CONFIG["task_specs"].append(SecretDataStoreConverter)
 
 
 # Sorry about all this crap.  I wanted to move this thing to another file, but
