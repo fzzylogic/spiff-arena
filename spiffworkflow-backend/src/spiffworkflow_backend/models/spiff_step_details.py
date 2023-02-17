@@ -1,5 +1,6 @@
 """Spiff_step_details."""
 from dataclasses import dataclass
+from typing import Union
 
 from sqlalchemy import ForeignKey
 from sqlalchemy import UniqueConstraint
@@ -27,4 +28,13 @@ class SpiffStepDetailsModel(SpiffworkflowBaseDBModel):
     )
     spiff_step: int = db.Column(db.Integer, nullable=False)
     task_json: dict = deferred(db.Column(db.JSON, nullable=False))  # type: ignore
-    timestamp: float = db.Column(db.DECIMAL(17, 6), nullable=False)
+    task_id: str = db.Column(db.String(50), nullable=False)
+    task_state: str = db.Column(db.String(50), nullable=False)
+    bpmn_task_identifier: str = db.Column(db.String(255), nullable=False)
+
+    start_in_seconds: float = db.Column(db.DECIMAL(17, 6), nullable=False)
+
+    # to fix mypy in 3.9 - not sure why syntax like:
+    #   float | None
+    # works in other dataclass db models
+    end_in_seconds: Union[float, None] = db.Column(db.DECIMAL(17, 6))

@@ -12,8 +12,7 @@ import {
   // @ts-ignore
 } from '@carbon/react';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MDEditor from '@uiw/react-md-editor';
 // eslint-disable-next-line import/no-named-as-default
 import Form from '../themes/carbon';
 import HttpService from '../services/HttpService';
@@ -26,6 +25,7 @@ export default function TaskShow() {
   const [userTasks, setUserTasks] = useState(null);
   const params = useParams();
   const navigate = useNavigate();
+  const [disabled, setDisabled] = useState(false);
 
   const { addError, removeError } = useAPIError();
 
@@ -40,8 +40,13 @@ export default function TaskShow() {
       //  instead of passing the process model identifier in through the params
       HttpService.makeCallToBackend({
         path: url,
-        successCallback: setUserTasks,
-        onUnauthorized: () => {},
+        successCallback: (tasks: any) => {
+          setDisabled(false);
+          setUserTasks(tasks);
+        },
+        onUnauthorized: () => {
+          setDisabled(false);
+        },
         failureCallback: (error: any) => {
           addError(error);
         },
@@ -68,13 +73,20 @@ export default function TaskShow() {
   };
 
   const handleFormSubmit = (event: any) => {
+    if (disabled) {
+      return;
+    }
+    setDisabled(true);
     removeError();
     const dataToSubmit = event.formData;
     delete dataToSubmit.isManualTask;
     HttpService.makeCallToBackend({
       path: `/tasks/${params.process_instance_id}/${params.task_id}`,
       successCallback: processSubmitResult,
-      failureCallback: addError,
+      failureCallback: (error: any) => {
+        addError(error);
+        setDisabled(false);
+      },
       httpMethod: 'PUT',
       postBody: dataToSubmit,
     });
@@ -141,6 +153,7 @@ export default function TaskShow() {
       Object.keys(jsonSchema.properties).forEach((propertyKey: string) => {
         const propertyMetadata = jsonSchema.properties[propertyKey];
         if (
+          typeof propertyMetadata === 'object' &&
           'minimumDate' in propertyMetadata &&
           propertyMetadata.minimumDate === 'today'
         ) {
@@ -188,7 +201,7 @@ export default function TaskShow() {
         },
       };
     } else if (task.form_ui_schema) {
-      formUiSchema = JSON.parse(task.form_ui_schema);
+      formUiSchema = task.form_ui_schema;
     }
     if (task.state !== 'READY') {
       formUiSchema = Object.assign(formUiSchema || {}, {
@@ -202,10 +215,16 @@ export default function TaskShow() {
       reactFragmentToHideSubmitButton = <div />;
     }
 
-    if (task.type === 'Manual Task' && task.state === 'READY') {
+    if (task.state === 'READY') {
+      let buttonText = 'Submit';
+      if (task.type === 'Manual Task') {
+        buttonText = 'Continue';
+      }
       reactFragmentToHideSubmitButton = (
         <div>
-          <Button type="submit">Continue</Button>
+          <Button type="submit" disabled={disabled}>
+            {buttonText}
+          </Button>
         </div>
       );
     }
@@ -216,8 +235,9 @@ export default function TaskShow() {
 
     return (
       <Grid fullWidth condensed>
-        <Column md={5} lg={8} sm={4}>
+        <Column sm={4} md={5} lg={8}>
           <Form
+            disabled={disabled}
             formData={taskData}
             onSubmit={handleFormSubmit}
             schema={jsonSchema}
@@ -242,9 +262,7 @@ export default function TaskShow() {
     }
     return (
       <div className="markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {instructions}
-        </ReactMarkdown>
+        <MDEditor.Markdown source={instructions} />
       </div>
     );
   };

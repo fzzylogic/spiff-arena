@@ -1225,10 +1225,6 @@ class TestProcessApi(BaseTest):
         assert response.json["updated_at_in_seconds"] > 0
         assert response.json["status"] == "complete"
         assert response.json["process_model_identifier"] == process_model_identifier
-        assert (
-            response.json["data"]["current_user"]["username"]
-            == with_super_admin_user.username
-        )
         assert response.json["data"]["Mike"] == "Awesome"
         assert response.json["data"]["person"] == "Kevin"
 
@@ -1686,6 +1682,14 @@ class TestProcessApi(BaseTest):
             response.json["form_schema"]["definitions"]["Color"]["anyOf"][1]["title"]
             == "Green"
         )
+
+        # if you set this in task data:
+        #   form_ui_hidden_fields = ["veryImportantFieldButOnlySometimes", "building.floor"]
+        # you will get this ui schema:
+        assert response.json["form_ui_schema"] == {
+            "building": {"floor": {"ui:widget": "hidden"}},
+            "veryImportantFieldButOnlySometimes": {"ui:widget": "hidden"},
+        }
 
     def test_process_instance_list_with_default_list(
         self,
@@ -2224,10 +2228,10 @@ class TestProcessApi(BaseTest):
         assert process_instance.status == "error"
         processor = ProcessInstanceProcessor(process_instance)
         spiff_task = processor.get_task_by_bpmn_identifier(
-            "script_task_one", processor.bpmn_process_instance
+            "script_task_two", processor.bpmn_process_instance
         )
         assert spiff_task is not None
-        assert spiff_task.data != {}
+        assert spiff_task.data == {"my_var": "THE VAR"}
 
     def test_process_model_file_create(
         self,
@@ -2762,7 +2766,7 @@ class TestProcessApi(BaseTest):
             headers=self.logged_in_headers(with_super_admin_user),
         )
         assert response.status_code == 200
-        end = next(task for task in response.json if task["name"] == "End")
+        end = next(task for task in response.json if task["type"] == "End Event")
         assert end["data"]["result"] == {"message": "message 1"}
 
     def test_manual_complete_task(
