@@ -53,6 +53,7 @@ from SpiffWorkflow.task import TaskState
 from SpiffWorkflow.util.deep_merge import DeepMerge  # type: ignore
 from sqlalchemy import text
 
+from spiffworkflow_backend.data_stores.secret_data_store import SecretDataStoreConverter
 from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.models.db import db
 from spiffworkflow_backend.models.file import File
@@ -88,8 +89,6 @@ from spiffworkflow_backend.services.process_model_service import ProcessModelSer
 from spiffworkflow_backend.services.service_task_service import ServiceTaskDelegate
 from spiffworkflow_backend.services.spec_file_service import SpecFileService
 from spiffworkflow_backend.services.user_service import UserService
-
-from spiffworkflow_backend.data_stores.secret_data_store import SecretDataStoreConverter
 
 SPIFF_SPEC_CONFIG["task_specs"].append(BusinessRuleTaskConverter)
 SPIFF_SPEC_CONFIG["task_specs"].append(SecretDataStoreConverter)
