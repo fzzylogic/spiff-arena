@@ -1,7 +1,7 @@
 # Base image to share ENV vars that activate VENV.
 FROM ghcr.io/sartography/python:3.11 AS base
 
-ENV VIRTUAL_ENV=/app/venv
+ENV VIRTUAL_ENV=/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
@@ -33,10 +33,10 @@ RUN apt-get update \
 # poetry install takes a long time and can be cached if dependencies don't change,
 # so that's why we tolerate running it twice.
 COPY pyproject.toml poetry.lock /app/
-RUN poetry install --without dev
+RUN poetry install --no-cache --without dev
 
 COPY . /app
-RUN poetry install --without dev
+RUN poetry install --no-cache --without dev
 
 # Final image without setup dependencies.
 FROM deployment AS final
