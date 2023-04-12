@@ -8,6 +8,7 @@ trap 'error_handler ${LINENO} $?' ERR
 set -o errtrace -o errexit -o nounset -o pipefail
 
 python_projects=(
+  spiffworkflow-backend/lib/element-units
   spiffworkflow-backend
 )
 
@@ -27,7 +28,7 @@ if [[ "$subcommand" == "pre" ]]; then
 fi
 
 function get_python_dirs() {
-  (git ls-tree -r HEAD --name-only | grep -E '\.py$' | awk -F '/' '{print $1}' | sort | uniq | grep -v '\.' | grep -Ev '^(bin|migrations)$') || echo ''
+  (git ls-tree -r HEAD --name-only | grep -E '\.py$' | awk -F '/' '{print $1}' | sort | uniq | grep -v '\.' | grep -Ev '^(bin|lib|migrations)$') || echo ''
 }
 
 function run_autoflake() {
@@ -86,7 +87,7 @@ for python_project in "${python_projects[@]}"; do
     pushd "$python_project"
     poetry install
     poetry run mypy $(get_python_dirs)
-    poetry run coverage run --parallel -m pytest
+    poetry run coverage run --parallel -m pytest --confcutdir=.
     popd
   fi
 done

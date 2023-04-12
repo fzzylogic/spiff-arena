@@ -1,3 +1,3 @@
 .PHONY: tests
 tests:
-	poetry run pytest --noconftest
+	poetry run coverage run --parallel -m pytest --confcutdir=.

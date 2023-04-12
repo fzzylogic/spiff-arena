@@ -10,6 +10,8 @@ packages = [{include = "element_units"}]
 python = ">=3.9,<3.12"
 
 [tool.poetry.dev-dependencies]
+coverage = {extras = ["toml"], version = "^6.1"}
+mypy = ">=0.961"
 pytest = "^7.1.2"
 
 [build-system]
