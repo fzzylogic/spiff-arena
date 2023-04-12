@@ -19,6 +19,7 @@ per-file-ignores =
 
     # asserts are ok in tests
     spiffworkflow-backend/tests/*:S101,D100,D101,D102,D103,D107
+    spiffworkflow-backend/lib/element-units/tests/*:S101,D100,D101,D102,D103,D107
 
     # prefer naming functions descriptively rather than forcing comments
     spiffworkflow-backend/src/*:D100,D101,D102,D103,D107
