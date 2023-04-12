@@ -6,6 +6,7 @@
 /.python-version
 /.pytype/
 /dist/
+/lib/*/dist/
 /docs/_build/
 /src/*.egg-info/
 /src/instance

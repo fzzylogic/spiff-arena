@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "element-units"
+version = "0.1.0"
+description = ""
+authors = ["Jon Herron <jon.herron@yahoo.com>"]
+readme = "README.md"
+packages = [{include = "element_units"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.1.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
