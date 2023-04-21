@@ -1,4 +1,6 @@
 import { format } from 'date-fns';
+import { Buffer } from 'buffer';
+
 import {
   DATE_TIME_FORMAT,
   DATE_FORMAT,
@@ -22,6 +24,17 @@ export const slugifyString = (str: any) => {
 
 export const underscorizeString = (inputString: string) => {
   return slugifyString(inputString).replace(/-/g, '_');
+};
+
+export const selectKeysFromSearchParams = (obj: any, keys: string[]) => {
+  const newSearchParams: { [key: string]: string } = {};
+  keys.forEach((key: string) => {
+    const value = obj.get(key);
+    if (value) {
+      newSearchParams[key] = value;
+    }
+  });
+  return newSearchParams;
 };
 
 export const capitalizeFirstLetter = (string: any) => {
@@ -57,12 +70,26 @@ export const convertDateObjectToFormattedString = (dateObject: Date) => {
   return null;
 };
 
+export const dateStringToYMDFormat = (dateString: string) => {
+  if (dateString && dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
+    if (DATE_FORMAT.startsWith('dd')) {
+      const d = dateString.split('-');
+      return `${d[2]}-${d[1]}-${d[0]}`;
+    }
+    if (DATE_FORMAT.startsWith('MM')) {
+      const d = dateString.split('-');
+      return `${d[2]}-${d[0]}-${d[1]}`;
+    }
+  }
+  return dateString;
+};
+
 export const convertDateAndTimeStringsToDate = (
   dateString: string,
   timeString: string
 ) => {
   if (dateString && timeString) {
-    return new Date(`${dateString}T${timeString}`);
+    return new Date(`${dateStringToYMDFormat(dateString)}T${timeString}`);
   }
   return null;
 };
@@ -79,7 +106,15 @@ export const convertDateAndTimeStringsToSeconds = (
 };
 
 export const convertStringToDate = (dateString: string) => {
-  return convertDateAndTimeStringsToSeconds(dateString, '00:10:00');
+  return convertDateAndTimeStringsToDate(dateString, '00:10:00');
+};
+
+export const ymdDateStringToConfiguredFormat = (dateString: string) => {
+  const dateObject = convertStringToDate(dateString);
+  if (dateObject) {
+    return convertDateObjectToFormattedString(dateObject);
+  }
+  return null;
 };
 
 export const convertSecondsToDateObject = (seconds: number) => {
@@ -122,7 +157,10 @@ export const convertSecondsToFormattedDateString = (seconds: number) => {
 
 export const convertDateStringToSeconds = (dateString: string) => {
   const dateObject = convertStringToDate(dateString);
-  return convertDateToSeconds(dateObject);
+  if (dateObject) {
+    return convertDateToSeconds(dateObject);
+  }
+  return null;
 };
 
 export const objectIsEmpty = (obj: object) => {
@@ -260,3 +298,19 @@ export const getBpmnProcessIdentifiers = (rootBpmnElement: any) => {
 export const isInteger = (str: string | number) => {
   return /^\d+$/.test(str.toString());
 };
+
+export const encodeBase64 = (data: string) => {
+  return Buffer.from(data).toString('base64');
+};
+
+export const decodeBase64 = (data: string) => {
+  return Buffer.from(data, 'base64').toString('ascii');
+};
+
+const MINUTES_IN_HOUR = 60;
+const SECONDS_IN_MINUTE = 60;
+const SECONDS_IN_HOUR = MINUTES_IN_HOUR * SECONDS_IN_MINUTE;
+const FOUR_HOURS_IN_SECONDS = SECONDS_IN_HOUR * 4;
+
+export const REFRESH_INTERVAL_SECONDS = 5;
+export const REFRESH_TIMEOUT_SECONDS = FOUR_HOURS_IN_SECONDS;

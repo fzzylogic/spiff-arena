@@ -2,7 +2,6 @@ from .helpers.spec import TaskSpecConverter
 
 from ...specs.StartTask import StartTask
 from ...specs.Simple import Simple
-from ...specs.LoopResetTask import LoopResetTask
 
 from ..specs.BpmnProcessSpec import _EndJoin
 from ..specs.BpmnSpecMixin import _BpmnCondition
@@ -10,7 +9,8 @@ from ..specs.NoneTask import NoneTask
 from ..specs.UserTask import UserTask
 from ..specs.ManualTask import ManualTask
 from ..specs.ScriptTask import ScriptTask
-from ..specs.SubWorkflowTask import CallActivity, TransactionSubprocess
+from ..specs.MultiInstanceTask import StandardLoopTask, SequentialMultiInstanceTask, ParallelMultiInstanceTask
+from ..specs.SubWorkflowTask import CallActivity, TransactionSubprocess, SubWorkflowTask
 from ..specs.ExclusiveGateway import ExclusiveGateway
 from ..specs.InclusiveGateway import InclusiveGateway
 from ..specs.ParallelGateway import ParallelGateway
@@ -25,8 +25,6 @@ from ..specs.events.IntermediateEvent import (
     SendTask,
     ReceiveTask,
 )
-
-from ..workflow import BpmnWorkflow
 
 
 class DefaultTaskSpecConverter(TaskSpecConverter):
@@ -47,23 +45,6 @@ class SimpleTaskConverter(DefaultTaskSpecConverter):
 class StartTaskConverter(DefaultTaskSpecConverter):
     def __init__(self, registry):
         super().__init__(StartTask, registry)
-
-
-class LoopResetTaskConverter(DefaultTaskSpecConverter):
-
-    def __init__(self, registry):
-        super().__init__(LoopResetTask, registry)
-
-    def to_dict(self, spec):
-        dct = super().to_dict(spec)
-        dct['destination_id'] = str(spec.destination_id)
-        dct['destination_spec_name'] = spec.destination_spec_name
-        return dct
-
-    def from_dict(self, dct):
-        spec = self.task_spec_from_dict(dct)
-        spec.destination_id = self.registry.convert(spec.destination_id)
-        return spec
 
 
 class EndJoinConverter(DefaultTaskSpecConverter):
@@ -109,6 +90,49 @@ class ScriptTaskConverter(BpmnTaskSpecConverter):
         return dct
 
 
+class StandardLoopTaskConverter(BpmnTaskSpecConverter):
+
+    def __init__(self, registry):
+        super().__init__(StandardLoopTask, registry)
+
+    def to_dict(self, spec):
+        dct = self.get_default_attributes(spec)
+        dct.update(self.get_bpmn_attributes(spec))
+        dct.update(self.get_standard_loop_attributes(spec))
+        return dct
+
+
+class MultiInstanceTaskConverter(BpmnTaskSpecConverter):
+
+    def to_dict(self, spec):
+        dct = self.get_default_attributes(spec)
+        dct.update(self.get_bpmn_attributes(spec))
+        dct['task_spec'] = spec.task_spec
+        dct['cardinality'] = spec.cardinality
+        dct['data_input'] = self.registry.convert(spec.data_input)
+        dct['data_output'] = self.registry.convert(spec.data_output)
+        dct['input_item'] = self.registry.convert(spec.input_item)
+        dct['output_item'] = self.registry.convert(spec.output_item)
+        dct['condition'] = spec.condition
+        return dct
+
+    def from_dict(self, dct):
+        dct['data_input'] = self.registry.restore(dct['data_input'])
+        dct['data_output'] = self.registry.restore(dct['data_output'])
+        dct['input_item'] = self.registry.restore(dct['input_item'])
+        dct['output_item'] = self.registry.restore(dct['output_item'])
+        return self.task_spec_from_dict(dct)
+
+
+class ParallelMultiInstanceTaskConverter(MultiInstanceTaskConverter):
+    def __init__(self, registry):
+        super().__init__(ParallelMultiInstanceTask, registry)
+
+class SequentialMultiInstanceTaskConverter(MultiInstanceTaskConverter):
+    def __init__(self, registry):
+        super().__init__(SequentialMultiInstanceTask, registry)
+
+
 class BoundaryEventParentConverter(BpmnTaskSpecConverter):
 
     def __init__(self, registry):
@@ -120,7 +144,10 @@ class BoundaryEventParentConverter(BpmnTaskSpecConverter):
         return dct
 
 
-class SubprocessConverter(BpmnTaskSpecConverter):
+class SubWorkflowConverter(BpmnTaskSpecConverter):
+
+    def __init__(self, cls, registry):
+        super().__init__(cls, registry)
 
     def to_dict(self, spec):
         dct = super().to_dict(spec)
@@ -131,17 +158,17 @@ class SubprocessConverter(BpmnTaskSpecConverter):
         dct['subworkflow_spec'] = dct.pop('spec')
         return self.task_spec_from_dict(dct)
 
+class SubprocessTaskConverter(SubWorkflowConverter):
+    def __init__(self, registry):
+        super().__init__(SubWorkflowTask, registry)
 
-class CallActivityTaskConverter(SubprocessConverter):
+class CallActivityTaskConverter(SubWorkflowConverter):
     def __init__(self, registry):
         super().__init__(CallActivity, registry)
-        self.wf_class = BpmnWorkflow
 
-
-class TransactionSubprocessTaskConverter(SubprocessConverter):
+class TransactionSubprocessTaskConverter(SubWorkflowConverter):
     def __init__(self, registry):
         super().__init__(TransactionSubprocess, registry)
-        self.wf_class = BpmnWorkflow
 
 
 class ConditionalGatewayConverter(BpmnTaskSpecConverter):
@@ -270,11 +297,14 @@ DEFAULT_TASK_SPEC_CONVERTER_CLASSES = [
     SimpleTaskConverter,
     StartTaskConverter,
     EndJoinConverter,
-    LoopResetTaskConverter,
     NoneTaskConverter,
     UserTaskConverter,
     ManualTaskConverter,
     ScriptTaskConverter,
+    StandardLoopTaskConverter,
+    ParallelMultiInstanceTaskConverter,
+    SequentialMultiInstanceTaskConverter,
+    SubprocessTaskConverter,
     CallActivityTaskConverter,
     TransactionSubprocessTaskConverter,
     StartEventConverter,

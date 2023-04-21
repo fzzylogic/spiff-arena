@@ -7,12 +7,10 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import {
-  CaretRight,
   TrashCan,
   StopOutline,
   PauseOutline,
   PlayOutline,
-  CaretLeft,
   InProgress,
   Checkmark,
   Warning,
@@ -27,6 +25,7 @@ import {
   Modal,
   Dropdown,
   Stack,
+  Loading,
   // @ts-ignore
 } from '@carbon/react';
 import { Can } from '@casl/react';
@@ -41,11 +40,13 @@ import {
 import ButtonWithConfirmation from '../components/ButtonWithConfirmation';
 import { useUriListForPermissions } from '../hooks/UriListForPermissions';
 import {
+  EventDefinition,
   PermissionsToCheck,
   ProcessData,
   ProcessInstance,
   ProcessInstanceMetadata,
-  ProcessInstanceTask,
+  Task,
+  TaskDefinitionPropertiesJson,
 } from '../interfaces';
 import { usePermissionFetcher } from '../hooks/PermissionService';
 import ProcessInstanceClass from '../classes/ProcessInstanceClass';
@@ -63,10 +64,16 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
 
   const [processInstance, setProcessInstance] =
     useState<ProcessInstance | null>(null);
-  const [tasks, setTasks] = useState<ProcessInstanceTask[] | null>(null);
+  const [tasks, setTasks] = useState<Task[] | null>(null);
   const [tasksCallHadError, setTasksCallHadError] = useState<boolean>(false);
-  const [taskToDisplay, setTaskToDisplay] = useState<object | null>(null);
+  const [taskToDisplay, setTaskToDisplay] = useState<Task | null>(null);
+  const [taskToTimeTravelTo, setTaskToTimeTravelTo] = useState<Task | null>(
+    null
+  );
   const [taskDataToDisplay, setTaskDataToDisplay] = useState<string>('');
+  const [showTaskDataLoading, setShowTaskDataLoading] =
+    useState<boolean>(false);
+
   const [processDataToDisplay, setProcessDataToDisplay] =
     useState<ProcessData | null>(null);
   const [editingTaskData, setEditingTaskData] = useState<boolean>(false);
@@ -75,7 +82,6 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
   const [eventPayload, setEventPayload] = useState<string>('{}');
   const [eventTextEditorEnabled, setEventTextEditorEnabled] =
     useState<boolean>(false);
-  const [displayDetails, setDisplayDetails] = useState<boolean>(false);
   const [showProcessInstanceMetadata, setShowProcessInstanceMetadata] =
     useState<boolean>(false);
 
@@ -99,7 +105,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     [targetUris.messageInstanceListPath]: ['GET'],
     [targetUris.processInstanceActionPath]: ['DELETE'],
     [targetUris.processInstanceLogListPath]: ['GET'],
-    [targetUris.processInstanceTaskListDataPath]: ['GET', 'PUT'],
+    [targetUris.processInstanceTaskDataPath]: ['GET', 'PUT'],
     [targetUris.processInstanceSendEventPath]: ['POST'],
     [targetUris.processInstanceCompleteTaskPath]: ['POST'],
     [targetUris.processModelShowPath]: ['PUT'],
@@ -115,44 +121,66 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     );
   };
 
+  let processInstanceShowPageBaseUrl = `/admin/process-instances/for-me/${params.process_model_id}/${params.process_instance_id}`;
+  let processInstanceLogListPageBaseUrl = `/admin/logs/for-me/${params.process_model_id}/${params.process_instance_id}`;
+  if (variant === 'all') {
+    processInstanceShowPageBaseUrl = `/admin/process-instances/${params.process_model_id}/${params.process_instance_id}`;
+    processInstanceLogListPageBaseUrl = `/admin/logs/${params.process_model_id}/${params.process_instance_id}`;
+  }
+
   useEffect(() => {
-    if (permissionsLoaded) {
-      const processTaskFailure = () => {
-        setTasksCallHadError(true);
-      };
-      let queryParams = '';
-      const processIdentifier = searchParams.get('process_identifier');
-      if (processIdentifier) {
-        queryParams = `?process_identifier=${processIdentifier}`;
-      }
-      let apiPath = '/process-instances/for-me';
-      if (variant === 'all') {
-        apiPath = '/process-instances';
-      }
-      HttpService.makeCallToBackend({
-        path: `${apiPath}/${modifiedProcessModelId}/${params.process_instance_id}${queryParams}`,
-        successCallback: setProcessInstance,
-      });
-      let taskParams = '?all_tasks=true';
-      if (typeof params.spiff_step !== 'undefined') {
-        taskParams = `${taskParams}&spiff_step=${params.spiff_step}`;
-      }
-      let taskPath = '';
-      if (ability.can('GET', targetUris.processInstanceTaskListDataPath)) {
-        taskPath = `${targetUris.processInstanceTaskListDataPath}${taskParams}`;
-      } else if (ability.can('GET', taskListPath)) {
-        taskPath = `${taskListPath}${taskParams}`;
-      }
-      if (taskPath) {
-        HttpService.makeCallToBackend({
-          path: taskPath,
-          successCallback: setTasks,
-          failureCallback: processTaskFailure,
-        });
-      } else {
-        setTasksCallHadError(true);
-      }
+    if (!permissionsLoaded) {
+      return undefined;
     }
+    const processTaskFailure = () => {
+      setTasksCallHadError(true);
+    };
+    const processTasksSuccess = (results: Task[]) => {
+      if (params.to_task_guid) {
+        const matchingTask = results.find(
+          (task: Task) => task.guid === params.to_task_guid
+        );
+        if (matchingTask) {
+          setTaskToTimeTravelTo(matchingTask);
+        }
+      }
+      setTasks(results);
+    };
+    let queryParams = '';
+    const processIdentifier = searchParams.get('process_identifier');
+    if (processIdentifier) {
+      queryParams = `?process_identifier=${processIdentifier}`;
+    }
+    let apiPath = '/process-instances/for-me';
+    if (variant === 'all') {
+      apiPath = '/process-instances';
+    }
+    HttpService.makeCallToBackend({
+      path: `${apiPath}/${modifiedProcessModelId}/${params.process_instance_id}${queryParams}`,
+      successCallback: setProcessInstance,
+    });
+    let taskParams = '?most_recent_tasks_only=true';
+    if (typeof params.to_task_guid !== 'undefined') {
+      taskParams = `${taskParams}&to_task_guid=${params.to_task_guid}`;
+    }
+    const bpmnProcessGuid = searchParams.get('bpmn_process_guid');
+    if (bpmnProcessGuid) {
+      taskParams = `${taskParams}&bpmn_process_guid=${bpmnProcessGuid}`;
+    }
+    let taskPath = '';
+    if (ability.can('GET', taskListPath)) {
+      taskPath = `${taskListPath}${taskParams}`;
+    }
+    if (taskPath) {
+      HttpService.makeCallToBackend({
+        path: taskPath,
+        successCallback: processTasksSuccess,
+        failureCallback: processTaskFailure,
+      });
+    } else {
+      setTasksCallHadError(true);
+    }
+    return undefined;
   }, [
     targetUris,
     params,
@@ -201,184 +229,81 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     });
   };
 
-  const getTaskIds = () => {
-    const taskIds = { completed: [], readyOrWaiting: [] };
-    if (tasks) {
-      const callingSubprocessId = searchParams.get('call_activity_task_id');
-      tasks.forEach(function getUserTasksElement(task: ProcessInstanceTask) {
-        if (
-          callingSubprocessId &&
-          callingSubprocessId !== task.calling_subprocess_task_id
-        ) {
-          return null;
-        }
-        if (task.state === 'COMPLETED') {
-          (taskIds.completed as any).push(task);
-        }
-        if (task.state === 'READY' || task.state === 'WAITING') {
-          (taskIds.readyOrWaiting as any).push(task);
-        }
-        return null;
-      });
+  const currentToTaskGuid = () => {
+    if (taskToTimeTravelTo) {
+      return taskToTimeTravelTo.guid;
     }
-    return taskIds;
+    return null;
   };
 
-  const currentSpiffStep = () => {
-    if (processInstance && typeof params.spiff_step === 'undefined') {
-      return processInstance.spiff_step || 0;
-    }
-
-    return Number(params.spiff_step);
+  // right now this just assume if taskToTimeTravelTo was passed in then
+  // this cannot be the active task.
+  // we may need a better way to figure this out.
+  const showingActiveTask = () => {
+    return !taskToTimeTravelTo;
   };
 
-  const showingFirstSpiffStep = () => {
-    return currentSpiffStep() === 1;
-  };
-
-  const showingLastSpiffStep = () => {
-    return processInstance && currentSpiffStep() === processInstance.spiff_step;
-  };
-
-  const spiffStepLink = (label: any, spiffStep: number) => {
+  const queryParams = () => {
     const processIdentifier = searchParams.get('process_identifier');
-    const callActivityTaskId = searchParams.get('call_activity_task_id');
+    const callActivityTaskId = searchParams.get('bpmn_process_guid');
     const queryParamArray = [];
     if (processIdentifier) {
       queryParamArray.push(`process_identifier=${processIdentifier}`);
     }
     if (callActivityTaskId) {
-      queryParamArray.push(`call_activity_task_id=${callActivityTaskId}`);
+      queryParamArray.push(`bpmn_process_guid=${callActivityTaskId}`);
     }
-    let queryParams = '';
+    let queryParamString = '';
     if (queryParamArray.length > 0) {
-      queryParams = `?${queryParamArray.join('&')}`;
+      queryParamString = `?${queryParamArray.join('&')}`;
     }
+    return queryParamString;
+  };
+
+  const completionViewLink = (label: any, taskGuid: string) => {
     return (
       <Link
         reloadDocument
         data-qa="process-instance-step-link"
-        to={`/admin/process-instances/${params.process_model_id}/${params.process_instance_id}/${spiffStep}${queryParams}`}
+        to={`${processInstanceShowPageBaseUrl}/${taskGuid}${queryParams()}`}
       >
         {label}
       </Link>
     );
   };
 
-  const previousStepLink = () => {
-    if (showingFirstSpiffStep()) {
-      return null;
-    }
-
-    return spiffStepLink(<CaretLeft />, currentSpiffStep() - 1);
-  };
-
-  const nextStepLink = () => {
-    if (showingLastSpiffStep()) {
-      return null;
-    }
-
-    return spiffStepLink(<CaretRight />, currentSpiffStep() + 1);
-  };
-
-  const returnToLastSpiffStep = () => {
-    window.location.href = `/admin/process-instances/${params.process_model_id}/${params.process_instance_id}`;
+  const returnToProcessInstance = () => {
+    window.location.href = `${processInstanceShowPageBaseUrl}${queryParams()}`;
   };
 
   const resetProcessInstance = () => {
     HttpService.makeCallToBackend({
-      path: `${targetUris.processInstanceResetPath}/${currentSpiffStep()}`,
-      successCallback: returnToLastSpiffStep,
+      path: `${targetUris.processInstanceResetPath}/${currentToTaskGuid()}`,
+      successCallback: returnToProcessInstance,
       httpMethod: 'POST',
     });
-  };
-
-  const detailedViewElement = () => {
-    if (!processInstance) {
-      return null;
-    }
-
-    if (displayDetails) {
-      return (
-        <>
-          <Grid condensed fullWidth>
-            <Button
-              kind="ghost"
-              className="button-link"
-              onClick={() => setDisplayDetails(false)}
-              title="Hide Details"
-            >
-              &laquo; Hide Details
-            </Button>
-          </Grid>
-          <Grid condensed fullWidth>
-            <Column sm={1} md={1} lg={2} className="grid-list-title">
-              Updated At:{' '}
-            </Column>
-            <Column sm={3} md={3} lg={3} className="grid-date">
-              {convertSecondsToFormattedDateTime(
-                processInstance.updated_at_in_seconds
-              )}
-            </Column>
-          </Grid>
-          <Grid condensed fullWidth>
-            <Column sm={1} md={1} lg={2} className="grid-list-title">
-              Created At:{' '}
-            </Column>
-            <Column sm={3} md={3} lg={3} className="grid-date">
-              {convertSecondsToFormattedDateTime(
-                processInstance.created_at_in_seconds
-              )}
-            </Column>
-          </Grid>
-          <Grid condensed fullWidth>
-            <Column sm={1} md={1} lg={2} className="grid-list-title">
-              Process model revision:{' '}
-            </Column>
-            <Column sm={3} md={3} lg={3} className="grid-date">
-              {processInstance.bpmn_version_control_identifier} (
-              {processInstance.bpmn_version_control_type})
-            </Column>
-          </Grid>
-        </>
-      );
-    }
-    return (
-      <Grid condensed fullWidth>
-        <Button
-          kind="ghost"
-          className="button-link"
-          onClick={() => setDisplayDetails(true)}
-          title="Show Details"
-        >
-          View Details &raquo;
-        </Button>
-      </Grid>
-    );
   };
 
   const getInfoTag = () => {
     if (!processInstance) {
       return null;
     }
-    const currentEndDate = convertSecondsToFormattedDateTime(
-      processInstance.end_in_seconds || 0
-    );
-    let currentEndDateTag;
-    if (currentEndDate) {
-      currentEndDateTag = (
-        <Grid condensed fullWidth>
-          <Column sm={1} md={1} lg={2} className="grid-list-title">
-            Completed:{' '}
-          </Column>
-          <Column sm={3} md={3} lg={3} className="grid-date">
-            {convertSecondsToFormattedDateTime(
-              processInstance.end_in_seconds || 0
-            ) || 'N/A'}
-          </Column>
-        </Grid>
-      );
+    let lastUpdatedTimeLabel = 'Updated At';
+    let lastUpdatedTime = processInstance.updated_at_in_seconds;
+    if (processInstance.end_in_seconds) {
+      lastUpdatedTimeLabel = 'Completed';
+      lastUpdatedTime = processInstance.end_in_seconds;
     }
+    const lastUpdatedTimeTag = (
+      <Grid condensed fullWidth>
+        <Column sm={1} md={1} lg={2} className="grid-list-title">
+          {lastUpdatedTimeLabel}:{' '}
+        </Column>
+        <Column sm={3} md={3} lg={3} className="grid-date">
+          {convertSecondsToFormattedDateTime(lastUpdatedTime || 0) || 'N/A'}
+        </Column>
+      </Grid>
+    );
 
     let statusIcon = <InProgress />;
     if (processInstance.status === 'suspended') {
@@ -422,13 +347,30 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
           <Column sm={1} md={1} lg={2} className="grid-list-title">
             Started:{' '}
           </Column>
-          <Column sm={3} md={3} lg={3} className="grid-date">
+          <Column
+            sm={3}
+            md={3}
+            lg={3}
+            className="grid-date"
+            title={`Created At: ${convertSecondsToFormattedDateTime(
+              processInstance.created_at_in_seconds
+            )}`}
+          >
             {convertSecondsToFormattedDateTime(
               processInstance.start_in_seconds || 0
             )}
           </Column>
         </Grid>
-        {currentEndDateTag}
+        {lastUpdatedTimeTag}
+        <Grid condensed fullWidth>
+          <Column sm={1} md={1} lg={2} className="grid-list-title">
+            Process model revision:{' '}
+          </Column>
+          <Column sm={3} md={3} lg={3} className="grid-date">
+            {processInstance.bpmn_version_control_identifier} (
+            {processInstance.bpmn_version_control_type})
+          </Column>
+        </Grid>
         <Grid condensed fullWidth>
           <Column sm={1} md={1} lg={2} className="grid-list-title">
             Status:{' '}
@@ -439,7 +381,6 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
             </Tag>
           </Column>
         </Grid>
-        {detailedViewElement()}
         <br />
         <Grid condensed fullWidth>
           <Column sm={2} md={2} lg={2}>
@@ -453,7 +394,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
                   size="sm"
                   className="button-white-background"
                   data-qa="process-instance-log-list-link"
-                  href={`/admin/logs/${modifiedProcessModelId}/${params.process_instance_id}`}
+                  href={`${processInstanceLogListPageBaseUrl}`}
                 >
                   Logs
                 </Button>
@@ -482,7 +423,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
                     setShowProcessInstanceMetadata(true);
                   }}
                 >
-                  Metadata
+                  Details
                 </Button>
               ) : null}
             </ButtonSet>
@@ -549,11 +490,33 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     return <div />;
   };
 
-  const initializeTaskDataToDisplay = (task: any) => {
-    if (task == null) {
+  const processTaskResult = (result: Task) => {
+    if (result == null) {
       setTaskDataToDisplay('');
     } else {
-      setTaskDataToDisplay(JSON.stringify(task.data, null, 2));
+      setTaskDataToDisplay(JSON.stringify(result.data, null, 2));
+    }
+    setShowTaskDataLoading(false);
+  };
+
+  const initializeTaskDataToDisplay = (task: Task | null) => {
+    if (
+      task &&
+      (task.state === 'COMPLETED' || task.state === 'READY') &&
+      ability.can('GET', targetUris.processInstanceTaskDataPath)
+    ) {
+      setShowTaskDataLoading(true);
+      HttpService.makeCallToBackend({
+        path: `${targetUris.processInstanceTaskDataPath}/${task.guid}`,
+        httpMethod: 'GET',
+        successCallback: processTaskResult,
+        failureCallback: (error: any) => {
+          setTaskDataToDisplay(`ERROR: ${error.message}`);
+          setShowTaskDataLoading(false);
+        },
+      });
+    } else {
+      setTaskDataToDisplay('');
     }
   };
 
@@ -595,13 +558,12 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
         successCallback: handleProcessDataShowResponse,
       });
     } else if (tasks) {
-      const matchingTask: any = tasks.find((task: any) => {
-        const callingSubprocessId = searchParams.get('call_activity_task_id');
+      const matchingTask: Task | undefined = tasks.find((task: Task) => {
         return (
-          (!callingSubprocessId ||
-            callingSubprocessId === task.calling_subprocess_task_id) &&
-          task.name === shapeElement.id &&
-          bpmnProcessIdentifiers.includes(task.process_identifier)
+          task.bpmn_identifier === shapeElement.id &&
+          bpmnProcessIdentifiers.includes(
+            task.bpmn_process_definition_identifier
+          )
         );
       });
       if (matchingTask) {
@@ -618,7 +580,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
 
   const getTaskById = (taskId: string) => {
     if (tasks !== null) {
-      return tasks.find((task: any) => task.id === taskId);
+      return tasks.find((task: Task) => task.guid === taskId) || null;
     }
     return null;
   };
@@ -627,81 +589,86 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     console.log('result', result);
   };
 
+  const getParentTaskFromTask = (task: Task) => {
+    return task.properties_json.parent;
+  };
+
   const createScriptUnitTest = () => {
     if (taskToDisplay) {
-      const taskToUse: any = taskToDisplay;
-      const previousTask: any = getTaskById(taskToUse.parent);
+      const previousTask: Task | null = getTaskById(
+        getParentTaskFromTask(taskToDisplay)
+      );
       HttpService.makeCallToBackend({
         path: `/process-models/${modifiedProcessModelId}/script-unit-tests`,
         httpMethod: 'POST',
         successCallback: processScriptUnitTestCreateResult,
         postBody: {
-          bpmn_task_identifier: taskToUse.name,
-          input_json: previousTask.data,
-          expected_output_json: taskToUse.data,
+          bpmn_task_identifier: taskToDisplay.bpmn_identifier,
+          input_json: previousTask ? previousTask.data : '',
+          expected_output_json: taskToDisplay.data,
         },
       });
     }
   };
 
-  const isCurrentTask = (task: any) => {
+  const isActiveTask = (task: Task) => {
     const subprocessTypes = [
       'Subprocess',
-      'Call Activity',
+      'CallActivity',
       'Transactional Subprocess',
     ];
     return (
       (task.state === 'WAITING' &&
-        subprocessTypes.filter((t) => t === task.type).length > 0) ||
+        subprocessTypes.filter((t) => t === task.typename).length > 0) ||
       task.state === 'READY'
     );
   };
 
-  const canEditTaskData = (task: any) => {
+  const canEditTaskData = (task: Task) => {
     return (
       processInstance &&
-      ability.can('PUT', targetUris.processInstanceTaskListDataPath) &&
-      isCurrentTask(task) &&
+      ability.can('PUT', targetUris.processInstanceTaskDataPath) &&
+      isActiveTask(task) &&
       processInstance.status === 'suspended' &&
-      showingLastSpiffStep()
+      showingActiveTask()
     );
   };
 
-  const canSendEvent = (task: any) => {
+  const canSendEvent = (task: Task) => {
     // We actually could allow this for any waiting events
     const taskTypes = ['Event Based Gateway'];
     return (
       processInstance &&
       processInstance.status === 'waiting' &&
       ability.can('POST', targetUris.processInstanceSendEventPath) &&
-      taskTypes.filter((t) => t === task.type).length > 0 &&
+      taskTypes.filter((t) => t === task.typename).length > 0 &&
       task.state === 'WAITING' &&
-      showingLastSpiffStep()
+      showingActiveTask()
     );
   };
 
-  const canCompleteTask = (task: any) => {
+  const canCompleteTask = (task: Task) => {
     return (
       processInstance &&
       processInstance.status === 'suspended' &&
       ability.can('POST', targetUris.processInstanceCompleteTaskPath) &&
-      isCurrentTask(task) &&
-      showingLastSpiffStep()
+      isActiveTask(task) &&
+      showingActiveTask()
     );
   };
 
-  const canResetProcess = (task: any) => {
+  const canResetProcess = (task: Task) => {
     return (
       ability.can('POST', targetUris.processInstanceResetPath) &&
       processInstance &&
       processInstance.status === 'suspended' &&
       task.state === 'READY' &&
-      !showingLastSpiffStep()
+      !showingActiveTask()
     );
   };
 
-  const getEvents = (task: any) => {
-    const handleMessage = (eventDefinition: any) => {
+  const getEvents = (task: Task) => {
+    const handleMessage = (eventDefinition: EventDefinition) => {
       if (eventDefinition.typename === 'MessageEventDefinition') {
         const newEvent = eventDefinition;
         delete newEvent.message_var;
@@ -711,7 +678,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
       return eventDefinition;
     };
     if (task.event_definition && task.event_definition.event_definitions)
-      return task.event_definition.event_definitions.map((e: any) =>
+      return task.event_definition.event_definitions.map((e: EventDefinition) =>
         handleMessage(e)
       );
     if (task.event_definition) return [handleMessage(task.event_definition)];
@@ -723,7 +690,6 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     setSelectingEvent(false);
     initializeTaskDataToDisplay(taskToDisplay);
     setEventPayload('{}');
-    console.log('cancel updating task');
     removeError();
   };
 
@@ -734,8 +700,13 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
   const saveTaskDataResult = (_: any) => {
     setEditingTaskData(false);
     const dataObject = taskDataStringToObject(taskDataToDisplay);
-    const taskToDisplayCopy = { ...taskToDisplay, data: dataObject }; // spread operator
-    setTaskToDisplay(taskToDisplayCopy);
+    if (taskToDisplay) {
+      const taskToDisplayCopy: Task = {
+        ...taskToDisplay,
+        data: dataObject,
+      }; // spread operator
+      setTaskToDisplay(taskToDisplayCopy);
+    }
     refreshPage();
   };
 
@@ -743,13 +714,12 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     if (!taskToDisplay) {
       return;
     }
-    console.log('saveTaskData');
     removeError();
 
     // taskToUse is copy of taskToDisplay, with taskDataToDisplay in data attribute
-    const taskToUse: any = { ...taskToDisplay, data: taskDataToDisplay };
+    const taskToUse: Task = { ...taskToDisplay, data: taskDataToDisplay };
     HttpService.makeCallToBackend({
-      path: `${targetUris.processInstanceTaskListDataPath}/${taskToUse.id}`,
+      path: `${targetUris.processInstanceTaskDataPath}/${taskToUse.guid}`,
       httpMethod: 'PUT',
       successCallback: saveTaskDataResult,
       failureCallback: addError,
@@ -772,20 +742,21 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
   };
 
   const completeTask = (execute: boolean) => {
-    const taskToUse: any = taskToDisplay;
-    HttpService.makeCallToBackend({
-      path: `/task-complete/${modifiedProcessModelId}/${params.process_instance_id}/${taskToUse.id}`,
-      httpMethod: 'POST',
-      successCallback: returnToLastSpiffStep,
-      postBody: { execute },
-    });
+    if (taskToDisplay) {
+      HttpService.makeCallToBackend({
+        path: `/task-complete/${modifiedProcessModelId}/${params.process_instance_id}/${taskToDisplay.guid}`,
+        httpMethod: 'POST',
+        successCallback: returnToProcessInstance,
+        postBody: { execute },
+      });
+    }
   };
 
-  const taskDisplayButtons = (task: any) => {
+  const taskDisplayButtons = (task: Task) => {
     const buttons = [];
 
     if (
-      task.type === 'Script Task' &&
+      task.typename === 'Script Task' &&
       ability.can('PUT', targetUris.processModelShowPath)
     ) {
       buttons.push(
@@ -798,11 +769,13 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
       );
     }
 
-    if (task.type === 'Call Activity') {
+    if (task.typename === 'CallActivity') {
+      const taskDefinitionPropertiesJson: TaskDefinitionPropertiesJson =
+        task.task_definition_properties_json;
       buttons.push(
         <Link
           data-qa="go-to-call-activity-result"
-          to={`${window.location.pathname}?process_identifier=${task.call_activity_process_identifier}&call_activity_task_id=${task.id}`}
+          to={`${window.location.pathname}?process_identifier=${taskDefinitionPropertiesJson.spec}&bpmn_process_guid=${task.guid}`}
           target="_blank"
         >
           View Call Activity Diagram
@@ -893,6 +866,10 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
   };
 
   const taskDataContainer = () => {
+    let taskDataClassName = '';
+    if (taskDataToDisplay.startsWith('ERROR:')) {
+      taskDataClassName = 'failure-string';
+    }
     return editingTaskData ? (
       <Editor
         height={600}
@@ -902,7 +879,12 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
         onChange={(value) => setTaskDataToDisplay(value || '')}
       />
     ) : (
-      <pre>{taskDataToDisplay}</pre>
+      <>
+        {showTaskDataLoading ? (
+          <Loading className="some-class" withOverlay={false} small />
+        ) : null}
+        <pre className={taskDataClassName}>{taskDataToDisplay}</pre>
+      </>
     );
   };
 
@@ -952,7 +934,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
       (processInstanceMetadata: ProcessInstanceMetadata) => {
         metadataComponents.push(
           <Grid condensed fullWidth>
-            <Column sm={1} md={1} lg={2} className="grid-list-title">
+            <Column sm={3} md={3} lg={5} className="grid-list-title">
               {processInstanceMetadata.key}
             </Column>
             <Column sm={3} md={3} lg={3} className="grid-date">
@@ -965,7 +947,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     return (
       <Modal
         open={showProcessInstanceMetadata}
-        modalHeading="Metadata"
+        modalHeading="Details"
         passiveModal
         onRequestClose={() => setShowProcessInstanceMetadata(false)}
       >
@@ -975,12 +957,15 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
   };
 
   const taskUpdateDisplayArea = () => {
-    const taskToUse: any = { ...taskToDisplay, data: taskDataToDisplay };
+    if (!taskToDisplay) {
+      return null;
+    }
+    const taskToUse: Task = { ...taskToDisplay, data: taskDataToDisplay };
     const candidateEvents: any = getEvents(taskToUse);
     if (taskToDisplay) {
-      let taskTitleText = taskToUse.id;
-      if (taskToUse.title) {
-        taskTitleText += ` (${taskToUse.title})`;
+      let taskTitleText = taskToUse.guid;
+      if (taskToUse.bpmn_name) {
+        taskTitleText += ` (${taskToUse.bpmn_name})`;
       }
       return (
         <Modal
@@ -989,18 +974,22 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
           onRequestClose={handleTaskDataDisplayClose}
         >
           <Stack orientation="horizontal" gap={2}>
-            <span title={taskTitleText}>{taskToUse.name}</span> (
-            {taskToUse.type}
+            <span title={taskTitleText}>{taskToUse.bpmn_identifier}</span> (
+            {taskToUse.typename}
             ): {taskToUse.state}
             {taskDisplayButtons(taskToUse)}
           </Stack>
-          {taskToUse.task_spiff_step ? (
+          <div>
+            <Stack orientation="horizontal" gap={2}>
+              Guid: {taskToUse.guid}
+            </Stack>
+          </div>
+          {taskToUse.state === 'COMPLETED' ? (
             <div>
               <Stack orientation="horizontal" gap={2}>
-                Task completed at step:{' '}
-                {spiffStepLink(
-                  `${taskToUse.task_spiff_step}`,
-                  taskToUse.task_spiff_step
+                {completionViewLink(
+                  'View process instance at the time when this task was active.',
+                  taskToUse.guid
                 )}
               </Stack>
               <br />
@@ -1014,23 +1003,6 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
       );
     }
     return null;
-  };
-
-  const stepsElement = () => {
-    if (!processInstance) {
-      return null;
-    }
-    return (
-      <Grid condensed fullWidth>
-        <Column sm={3} md={3} lg={3}>
-          <Stack orientation="horizontal" gap={3} className="smaller-text">
-            {previousStepLink()}
-            Step {currentSpiffStep()} of {processInstance.spiff_step}
-            {nextStepLink()}
-          </Stack>
-        </Column>
-      </Grid>
-    );
   };
 
   const buttonIcons = () => {
@@ -1067,8 +1039,40 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     return elements;
   };
 
+  const viewMostRecentStateComponent = () => {
+    if (!taskToTimeTravelTo) {
+      return null;
+    }
+    const title = `${taskToTimeTravelTo.id}: ${taskToTimeTravelTo.guid}: ${taskToTimeTravelTo.bpmn_identifier}`;
+    return (
+      <>
+        <Grid condensed fullWidth>
+          <Column md={8} lg={16} sm={4}>
+            <p>
+              Viewing process instance at the time when{' '}
+              <span title={title}>
+                <strong>
+                  {taskToTimeTravelTo.bpmn_name ||
+                    taskToTimeTravelTo.bpmn_identifier}
+                </strong>
+              </span>{' '}
+              was active.{' '}
+              <Link
+                reloadDocument
+                data-qa="process-instance-view-active-task-link"
+                to={processInstanceShowPageBaseUrl}
+              >
+                View current process instance state.
+              </Link>
+            </p>
+          </Column>
+        </Grid>
+        <br />
+      </>
+    );
+  };
+
   if (processInstance && (tasks || tasksCallHadError)) {
-    const taskIds = getTaskIds();
     const processModelId = unModifyProcessIdentifierForPathParam(
       params.process_model_id ? params.process_model_id : ''
     );
@@ -1120,14 +1124,13 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
         {taskUpdateDisplayArea()}
         {processDataDisplayArea()}
         {processInstanceMetadataArea()}
-        {stepsElement()}
         <br />
+        {viewMostRecentStateComponent()}
         <ReactDiagramEditor
           processModelId={processModelId || ''}
           diagramXML={processInstance.bpmn_xml_file_contents || ''}
           fileName={processInstance.bpmn_xml_file_contents || ''}
-          readyOrWaitingProcessInstanceTasks={taskIds.readyOrWaiting}
-          completedProcessInstanceTasks={taskIds.completed}
+          tasks={tasks}
           diagramType="readonly"
           onElementClick={handleClickedDiagramTask}
         />

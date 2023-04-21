@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import validator from '@rjsf/validator-ajv8';
 
@@ -8,34 +8,125 @@ import {
   Tabs,
   Grid,
   Column,
+  ComboBox,
   Button,
-  // @ts-ignore
+  ButtonSet,
 } from '@carbon/react';
 
-import MDEditor from '@uiw/react-md-editor';
 // eslint-disable-next-line import/no-named-as-default
 import Form from '../themes/carbon';
 import HttpService from '../services/HttpService';
 import useAPIError from '../hooks/UseApiError';
 import { modifyProcessIdentifierForPathParam } from '../helpers';
 import { ProcessInstanceTask } from '../interfaces';
+import ProcessBreadcrumb from '../components/ProcessBreadcrumb';
+import InstructionsForEndUser from '../components/InstructionsForEndUser';
+
+// TODO: move this somewhere else
+function TypeAheadWidget({
+  id,
+  onChange,
+  options: { category, itemFormat },
+}: {
+  id: string;
+  onChange: any;
+  options: any;
+}) {
+  const pathForCategory = (inputText: string) => {
+    return `/connector-proxy/type-ahead/${category}?prefix=${inputText}&limit=100`;
+  };
+
+  const lastSearchTerm = useRef('');
+  const [items, setItems] = useState<any[]>([]);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const itemFormatRegex = /[^{}]+(?=})/g;
+  const itemFormatSubstitutions = itemFormat.match(itemFormatRegex);
+
+  const itemToString = (item: any) => {
+    if (!item) {
+      return null;
+    }
+
+    let str = itemFormat;
+    itemFormatSubstitutions.forEach((key: string) => {
+      str = str.replace(`{${key}}`, item[key]);
+    });
+    return str;
+  };
+
+  const handleTypeAheadResult = (result: any, inputText: string) => {
+    if (lastSearchTerm.current === inputText) {
+      setItems(result);
+    }
+  };
+
+  const typeAheadSearch = (inputText: string) => {
+    if (inputText) {
+      lastSearchTerm.current = inputText;
+      // TODO: check cache of prefixes -> results
+      HttpService.makeCallToBackend({
+        path: pathForCategory(inputText),
+        successCallback: (result: any) =>
+          handleTypeAheadResult(result, inputText),
+      });
+    }
+  };
+
+  return (
+    <ComboBox
+      onInputChange={typeAheadSearch}
+      onChange={(event: any) => {
+        setSelectedItem(event.selectedItem);
+        onChange(itemToString(event.selectedItem));
+      }}
+      id={id}
+      items={items}
+      itemToString={itemToString}
+      placeholder={`Start typing to search for ${category}...`}
+      titleText={`Type ahead search for ${category}`}
+      selectedItem={selectedItem}
+    />
+  );
+}
+
+enum FormSubmitType {
+  Default,
+  Draft,
+}
 
 export default function TaskShow() {
   const [task, setTask] = useState<ProcessInstanceTask | null>(null);
-  const [userTasks, setUserTasks] = useState(null);
+  const [userTasks] = useState(null);
   const params = useParams();
   const navigate = useNavigate();
   const [disabled, setDisabled] = useState(false);
+  // save current form data so that we can avoid validations in certain situations
+  const [currentFormObject, setCurrentFormObject] = useState<any>({});
 
   const { addError, removeError } = useAPIError();
+
+  const navigateToInterstitial = (myTask: ProcessInstanceTask) => {
+    navigate(
+      `/process/${modifyProcessIdentifierForPathParam(
+        myTask.process_model_identifier
+      )}/${myTask.process_instance_id}/interstitial`
+    );
+  };
 
   useEffect(() => {
     const processResult = (result: ProcessInstanceTask) => {
       setTask(result);
-      const url = `/task-data/${modifyProcessIdentifierForPathParam(
+      setDisabled(false);
+
+      if (!result.can_complete) {
+        navigateToInterstitial(result);
+      }
+
+      /*  Disable call to load previous tasks -- do not display menu.
+      const url = `/v1.0/process-instances/for-me/${modifyProcessIdentifierForPathParam(
         result.process_model_identifier
-      )}/${params.process_instance_id}`;
-      // if user is unauthorized to get task-data then don't do anything
+      )}/${params.process_instance_id}/task-info`;
+      // if user is unauthorized to get process-instance task-info then don't do anything
       // Checking like this so we can dynamically create the url with the correct process model
       //  instead of passing the process model identifier in through the params
       HttpService.makeCallToBackend({
@@ -51,6 +142,7 @@ export default function TaskShow() {
           addError(error);
         },
       });
+      */
     };
     HttpService.makeCallToBackend({
       path: `/tasks/${params.process_instance_id}/${params.task_id}`,
@@ -66,26 +158,37 @@ export default function TaskShow() {
     if (result.ok) {
       navigate(`/tasks`);
     } else if (result.process_instance_id) {
-      navigate(`/tasks/${result.process_instance_id}/${result.id}`);
+      if (result.can_complete) {
+        navigate(`/tasks/${result.process_instance_id}/${result.id}`);
+      } else {
+        navigateToInterstitial(result);
+      }
     } else {
       addError(result);
     }
   };
 
-  const handleFormSubmit = (event: any) => {
+  const handleFormSubmit = (
+    formObject: any,
+    _event: any,
+    submitType: FormSubmitType = FormSubmitType.Default
+  ) => {
     if (disabled) {
       return;
     }
+    let queryParams = '';
+    if (submitType === FormSubmitType.Draft) {
+      queryParams = '?save_as_draft=true';
+    }
     setDisabled(true);
     removeError();
-    const dataToSubmit = event.formData;
+    const dataToSubmit = formObject.formData;
     delete dataToSubmit.isManualTask;
     HttpService.makeCallToBackend({
-      path: `/tasks/${params.process_instance_id}/${params.task_id}`,
+      path: `/tasks/${params.process_instance_id}/${params.task_id}${queryParams}`,
       successCallback: processSubmitResult,
       failureCallback: (error: any) => {
         addError(error);
-        setDisabled(false);
       },
       httpMethod: 'PUT',
       postBody: dataToSubmit,
@@ -168,9 +271,21 @@ export default function TaskShow() {
             }
           }
         }
+
+        // recurse through all nested properties as well
+        getFieldsWithDateValidations(
+          propertyMetadata,
+          formData[propertyKey],
+          errors[propertyKey]
+        );
       });
     }
     return errors;
+  };
+
+  const updateFormData = (formObject: any) => {
+    currentFormObject.formData = formObject.formData;
+    setCurrentFormObject(currentFormObject);
   };
 
   const formElement = () => {
@@ -216,22 +331,39 @@ export default function TaskShow() {
     }
 
     if (task.state === 'READY') {
-      let buttonText = 'Submit';
+      let submitButtonText = 'Submit';
+      let saveAsDraftButton = null;
       if (task.type === 'Manual Task') {
-        buttonText = 'Continue';
+        submitButtonText = 'Continue';
+      } else if (task.type === 'User Task') {
+        saveAsDraftButton = (
+          <Button
+            id="save-as-draft-button"
+            disabled={disabled}
+            kind="secondary"
+            onClick={() =>
+              handleFormSubmit(currentFormObject, null, FormSubmitType.Draft)
+            }
+          >
+            Save as draft
+          </Button>
+        );
       }
       reactFragmentToHideSubmitButton = (
-        <div>
-          <Button type="submit" disabled={disabled}>
-            {buttonText}
+        <ButtonSet>
+          <Button type="submit" id="submit-button" disabled={disabled}>
+            {submitButtonText}
           </Button>
-        </div>
+          {saveAsDraftButton}
+        </ButtonSet>
       );
     }
 
     const customValidate = (formData: any, errors: any) => {
       return getFieldsWithDateValidations(jsonSchema, formData, errors);
     };
+
+    const widgets = { typeAhead: TypeAheadWidget };
 
     return (
       <Grid fullWidth condensed>
@@ -242,28 +374,17 @@ export default function TaskShow() {
             onSubmit={handleFormSubmit}
             schema={jsonSchema}
             uiSchema={formUiSchema}
+            widgets={widgets}
             validator={validator}
+            onChange={updateFormData}
             customValidate={customValidate}
+            omitExtraData
+            liveOmit
           >
             {reactFragmentToHideSubmitButton}
           </Form>
         </Column>
       </Grid>
-    );
-  };
-
-  const instructionsElement = () => {
-    if (!task) {
-      return null;
-    }
-    let instructions = '';
-    if (task.properties.instructionsForEndUser) {
-      instructions = task.properties.instructionsForEndUser;
-    }
-    return (
-      <div className="markdown">
-        <MDEditor.Markdown source={instructions} />
-      </div>
     );
   };
 
@@ -275,11 +396,22 @@ export default function TaskShow() {
 
     return (
       <main>
+        <ProcessBreadcrumb
+          hotCrumbs={[
+            [
+              `Process Instance Id: ${params.process_instance_id}`,
+              `/admin/process-instances/for-me/${modifyProcessIdentifierForPathParam(
+                task.process_model_identifier
+              )}/${params.process_instance_id}`,
+            ],
+            [`Task: ${task.title || task.id}`],
+          ]}
+        />
         <div>{buildTaskNavigation()}</div>
         <h3>
           Task: {task.title} ({task.process_model_display_name}){statusString}
         </h3>
-        {instructionsElement()}
+        <InstructionsForEndUser task={task} />
         {formElement()}
       </main>
     );

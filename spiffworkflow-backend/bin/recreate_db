@@ -34,29 +34,49 @@ if [[ "${1:-}" == "clean" ]]; then
     exit 1
   fi
 
-  rm -f ./src/instance/*.sqlite3
-  mysql -uroot -e "DROP DATABASE IF EXISTS spiffworkflow_backend_local_development"
-  mysql -uroot -e "DROP DATABASE IF EXISTS spiffworkflow_backend_unit_testing"
+  if [[ "${SPIFFWORKFLOW_BACKEND_DATABASE_TYPE:-mysql}" != "mysql" ]]; then
+    rm -f ./src/instance/*.sqlite3
+  else
+    mysql -uroot -e "DROP DATABASE IF EXISTS spiffworkflow_backend_local_development"
+    mysql -uroot -e "DROP DATABASE IF EXISTS spiffworkflow_backend_unit_testing"
+  fi
 
   # TODO: check to see if the db already exists and we can connect to it. also actually clean it up.
   # start postgres in background with one db
   if [[ "${SPIFFWORKFLOW_BACKEND_DATABASE_TYPE:-}" == "postgres" ]]; then
-    if ! docker exec -it postgres-spiff psql -U spiffworkflow_backend spiffworkflow_backend_testing -c "select 1"; then
-      docker run --name postgres-spiff -p 5432:5432 -e POSTGRES_PASSWORD=spiffworkflow_backend -e POSTGRES_USER=spiffworkflow_backend -e POSTGRES_DB=spiffworkflow_backend_testing -d postgres
+    container_name="postgres-spiff"
+    container_regex="^postgres-spiff$"
+    if [[ -n "$(docker ps -qa -f name=$container_regex)" ]]; then
+      echo ":: Found postgres container - $container_name"
+      if [[ -n "$(docker ps -q -f name=$container_regex)" ]]; then
+        echo ":: Stopping running container - $container_name"
+        docker stop $container_name
+      fi
+      echo ":: Removing stopped container - $container_name"
+      docker rm $container_name
+    fi
+    if ! docker exec -it postgres-spiff psql -U spiffworkflow_backend spiffworkflow_backend_unit_testing -c "select 1"; then
+      docker run --name postgres-spiff -p 5432:5432 -e POSTGRES_PASSWORD=spiffworkflow_backend -e POSTGRES_USER=spiffworkflow_backend -e POSTGRES_DB=spiffworkflow_backend_unit_testing -d postgres
       sleep 4 # classy
     fi
     if ! docker exec -it postgres-spiff psql -U spiffworkflow_backend spiffworkflow_backend_local_development -c "select 1"; then
-      # create other db. spiffworkflow_backend_testing came with the docker run.
-      docker exec -it postgres-spiff psql -U spiffworkflow_backend spiffworkflow_backend_testing -c "create database spiffworkflow_backend_local_development;"
+      # create other db. spiffworkflow_backend_unit_testing came with the docker run.
+      docker exec -it postgres-spiff psql -U spiffworkflow_backend spiffworkflow_backend_unit_testing -c "create database spiffworkflow_backend_local_development;"
     fi
   fi
+  tasks="$tasks upgrade"
 elif [[ "${1:-}" == "migrate" ]]; then
-  tasks="$tasks migrate"
+  tasks="$tasks migrate upgrade"
+elif [[ "${1:-}" == "downgrade" ]]; then
+  tasks="$tasks downgrade"
+else
+  tasks="$tasks upgrade"
 fi
-tasks="$tasks upgrade"
 
-mysql -uroot -e "CREATE DATABASE IF NOT EXISTS spiffworkflow_backend_local_development"
-mysql -uroot -e "CREATE DATABASE IF NOT EXISTS spiffworkflow_backend_unit_testing"
+if [[ "${SPIFFWORKFLOW_BACKEND_DATABASE_TYPE:-mysql}" == "mysql" ]]; then
+  mysql -uroot -e "CREATE DATABASE IF NOT EXISTS spiffworkflow_backend_local_development"
+  mysql -uroot -e "CREATE DATABASE IF NOT EXISTS spiffworkflow_backend_unit_testing"
+fi
 
 for task in $tasks; do
   SPIFFWORKFLOW_BACKEND_ENV=local_development FLASK_APP=src/spiffworkflow_backend poetry run flask db "$task"
@@ -64,6 +84,8 @@ done
 
 SPIFFWORKFLOW_BACKEND_ENV=unit_testing FLASK_APP=src/spiffworkflow_backend poetry run flask db upgrade
 if [[ -n "${SPIFFWORKFLOW_BACKEND_ENV:-}" ]] && ! grep -Eq '^(local_development|unit_testing)$' <<< "$SPIFFWORKFLOW_BACKEND_ENV"; then
-  mysql -uroot -e "CREATE DATABASE IF NOT EXISTS spiffworkflow_backend_$SPIFFWORKFLOW_BACKEND_ENV"
+  if [[ "${SPIFFWORKFLOW_BACKEND_DATABASE_TYPE:-mysql}" == "mysql" ]]; then
+    mysql -uroot -e "CREATE DATABASE IF NOT EXISTS spiffworkflow_backend_$SPIFFWORKFLOW_BACKEND_ENV"
+  fi
   FLASK_APP=src/spiffworkflow_backend poetry run flask db upgrade
 fi

@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from flask import g
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
 
@@ -12,6 +13,7 @@ from spiffworkflow_backend.models.db import SpiffworkflowBaseDBModel
 from spiffworkflow_backend.models.group import GroupModel
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModel
 from spiffworkflow_backend.models.task import Task
+from spiffworkflow_backend.models.task import TaskModel
 from spiffworkflow_backend.models.user import UserModel
 
 
@@ -29,12 +31,14 @@ class HumanTaskModel(SpiffworkflowBaseDBModel):
 
     id: int = db.Column(db.Integer, primary_key=True)
     process_instance_id: int = db.Column(
-        ForeignKey(ProcessInstanceModel.id), nullable=False  # type: ignore
+        ForeignKey(ProcessInstanceModel.id), nullable=False, index=True  # type: ignore
     )
-    lane_assignment_id: int | None = db.Column(ForeignKey(GroupModel.id))
-    completed_by_user_id: int = db.Column(ForeignKey(UserModel.id), nullable=True)  # type: ignore
+    lane_assignment_id: int | None = db.Column(ForeignKey(GroupModel.id), index=True)
+    completed_by_user_id: int = db.Column(ForeignKey(UserModel.id), nullable=True, index=True)  # type: ignore
 
-    actual_owner_id: int = db.Column(ForeignKey(UserModel.id))  # type: ignore
+    completed_by_user = relationship("UserModel", foreign_keys=[completed_by_user_id], viewonly=True)
+
+    actual_owner_id: int = db.Column(ForeignKey(UserModel.id), index=True)  # type: ignore
     # actual_owner: RelationshipProperty[UserModel] = relationship(UserModel)
 
     form_file_name: str | None = db.Column(db.String(50))
@@ -43,12 +47,15 @@ class HumanTaskModel(SpiffworkflowBaseDBModel):
     updated_at_in_seconds: int = db.Column(db.Integer)
     created_at_in_seconds: int = db.Column(db.Integer)
 
+    # task_id came first which is why it's a string and task_model_id is the int and foreignkey
+    task_model_id: int = db.Column(ForeignKey(TaskModel.id), nullable=True, index=True)  # type: ignore
     task_id: str = db.Column(db.String(50))
-    task_name: str = db.Column(db.String(50))
+    task_name: str = db.Column(db.String(255))
     task_title: str = db.Column(db.String(50))
     task_type: str = db.Column(db.String(50))
     task_status: str = db.Column(db.String(50))
     process_model_display_name: str = db.Column(db.String(255))
+    bpmn_process_identifier: str = db.Column(db.String(255))
     completed: bool = db.Column(db.Boolean, default=False, nullable=False, index=True)
 
     human_task_users = relationship("HumanTaskUserModel", cascade="delete")
@@ -62,20 +69,27 @@ class HumanTaskModel(SpiffworkflowBaseDBModel):
     @classmethod
     def to_task(cls, task: HumanTaskModel) -> Task:
         """To_task."""
+        can_complete = False
+        for user in task.human_task_users:
+            if user.user_id == g.user.id:
+                can_complete = True
+                break
+
         new_task = Task(
             task.task_id,
             task.task_name,
             task.task_title,
             task.task_type,
             task.task_status,
+            can_complete,
             process_instance_id=task.process_instance_id,
         )
         if hasattr(task, "process_model_display_name"):
             new_task.process_model_display_name = task.process_model_display_name
         if hasattr(task, "process_group_identifier"):
             new_task.process_group_identifier = task.process_group_identifier
-        if hasattr(task, "process_model_identifier"):
-            new_task.process_model_identifier = task.process_model_identifier
+        if hasattr(task, "bpmn_process_identifier"):
+            new_task.bpmn_process_identifier = task.bpmn_process_identifier
 
         # human tasks only have status when getting the list on the home page
         # and it comes from the process_instance. it should not be confused with task_status.

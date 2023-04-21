@@ -73,7 +73,7 @@ export default function AdminRoutes() {
           element={<ProcessInstanceShow variant="for-me" />}
         />
         <Route
-          path="process-instances/for-me/:process_model_id/:process_instance_id/:spiff_step"
+          path="process-instances/for-me/:process_model_id/:process_instance_id/:to_task_guid"
           element={<ProcessInstanceShow variant="for-me" />}
         />
         <Route
@@ -81,7 +81,7 @@ export default function AdminRoutes() {
           element={<ProcessInstanceShow variant="all" />}
         />
         <Route
-          path="process-instances/:process_model_id/:process_instance_id/:spiff_step"
+          path="process-instances/:process_model_id/:process_instance_id/:to_task_guid"
           element={<ProcessInstanceShow variant="all" />}
         />
         <Route
@@ -110,7 +110,11 @@ export default function AdminRoutes() {
         />
         <Route
           path="logs/:process_model_id/:process_instance_id"
-          element={<ProcessInstanceLogList />}
+          element={<ProcessInstanceLogList variant="all" />}
+        />
+        <Route
+          path="logs/for-me/:process_model_id/:process_instance_id"
+          element={<ProcessInstanceLogList variant="for-me" />}
         />
         <Route
           path="process-instances"

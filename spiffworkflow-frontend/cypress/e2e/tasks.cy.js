@@ -50,18 +50,19 @@ describe('tasks', () => {
     );
 
     cy.contains('Task: get_user_generated_number_three');
-    cy.getBySel('form-nav-form2').click();
-    checkFormFieldIsReadOnly(
-      'get_user_generated_number_two',
-      '#root_user_generated_number_2'
-    );
-    cy.getBySel('form-nav-form1').click();
-    checkFormFieldIsReadOnly(
-      'get_user_generated_number_one',
-      '#root_user_generated_number_1'
-    );
-
-    cy.getBySel('form-nav-form3').click();
+    // TODO: remove this if we decide to completely kill form navigation
+    // cy.getBySel('form-nav-form2').click();
+    // checkFormFieldIsReadOnly(
+    //   'get_user_generated_number_two',
+    //   '#root_user_generated_number_2'
+    // );
+    // cy.getBySel('form-nav-form1').click();
+    // checkFormFieldIsReadOnly(
+    //   'get_user_generated_number_one',
+    //   '#root_user_generated_number_1'
+    // );
+    //
+    // cy.getBySel('form-nav-form3').click();
     submitInputIntoFormField(
       'get_user_generated_number_three',
       '#root_user_generated_number_3',
@@ -74,7 +75,7 @@ describe('tasks', () => {
     cy.assertAtLeastOneItemInPaginatedResults();
 
     // This should get the first one which should be the one we just completed
-    cy.getBySel('process-instance-show-link').first().click();
+    cy.getBySel('process-instance-show-link-id').first().click();
     cy.contains('Process Instance Id: ');
 
     cy.get(`g[data-element-id=form3]`).click();
@@ -89,7 +90,9 @@ describe('tasks', () => {
     cy.get('.is-visible .cds--modal-close').click();
 
     cy.navigateToHome();
-    cy.contains('Tasks').should('exist');
+
+    // look for somethig to make sure the homepage has loaded
+    cy.contains('Waiting for me').should('exist');
 
     // FIXME: this will probably need a better way to link to the proper form that we want
     cy.contains('Go').click();
@@ -106,7 +109,7 @@ describe('tasks', () => {
     cy.assertAtLeastOneItemInPaginatedResults();
 
     // This should get the first one which should be the one we just completed
-    cy.getBySel('process-instance-show-link').first().click();
+    cy.getBySel('process-instance-show-link-id').first().click();
     cy.contains('Process Instance Id: ');
     cy.contains('Status: complete');
   });
@@ -120,6 +123,6 @@ describe('tasks', () => {
     kickOffModelWithForm();
 
     cy.navigateToHome();
-    cy.basicPaginationTest('process-instance-show-link');
+    cy.basicPaginationTest('process-instance-show-link-id');
   });
 });

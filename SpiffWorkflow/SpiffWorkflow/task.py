@@ -31,20 +31,6 @@ metrics = logging.getLogger('spiff.metrics')
 data_log = logging.getLogger('spiff.data')
 
 
-def updateDotDict(dct,dotted_path,value):
-    parts = dotted_path.split(".")
-    path_len = len(parts)
-    root = dct
-    for i, key in enumerate(parts):
-        if (i + 1) < path_len:
-            if key not in dct:
-                dct[key] = {}
-            dct = dct[key]
-        else:
-            dct[key] = value
-    return root
-
-
 class TaskState:
     """
 
@@ -91,9 +77,9 @@ class TaskState:
     CANCELLED = 64
 
     FINISHED_MASK = CANCELLED | COMPLETED
-    DEFINITE_MASK = FUTURE | WAITING | READY | FINISHED_MASK
-    PREDICTED_MASK = FUTURE | LIKELY | MAYBE
-    NOT_FINISHED_MASK = PREDICTED_MASK | WAITING | READY
+    DEFINITE_MASK = FUTURE | WAITING | READY
+    PREDICTED_MASK = LIKELY | MAYBE
+    NOT_FINISHED_MASK = PREDICTED_MASK | DEFINITE_MASK
     ANY_MASK = FINISHED_MASK | NOT_FINISHED_MASK
 
 
@@ -247,15 +233,10 @@ class Task(object,  metaclass=DeprecatedMetaTask):
         self.id = uuid4()
         self.thread_id = self.__class__.thread_id_pool
         self.data = {}
-        self.terminate_current_loop = False
         self.internal_data = {}
-        self.mi_collect_data = {}
+        self.last_state_change = time.time()
         if parent is not None:
             self.parent._child_added_notify(self)
-
-        # TODO: get rid of this stuff
-        self.last_state_change = time.time()
-        self.state_history = [state]
 
     @property
     def state(self):
@@ -277,7 +258,6 @@ class Task(object,  metaclass=DeprecatedMetaTask):
         if value != self.state:
             logger.info(f'State change to {TaskStateNames[value]}', extra=self.log_info())
             self.last_state_change = time.time()
-            self.state_history.append(value)
             self._state = value
         else:
             logger.debug(f'State set to {TaskStateNames[value]}', extra=self.log_info())
@@ -291,7 +271,8 @@ class Task(object,  metaclass=DeprecatedMetaTask):
     def log_info(self, dct=None):
         extra = dct or {}
         extra.update({
-            'workflow': self.workflow.spec.name,
+            'workflow_spec': self.workflow.spec.name,
+            'workflow_name': self.workflow.spec.description,
             'task_spec': self.task_spec.name,
             'task_name': self.task_spec.description,
             'task_id': self.id,
@@ -300,11 +281,6 @@ class Task(object,  metaclass=DeprecatedMetaTask):
             'internal_data': self.internal_data if logger.level <= 10 else None,
         })
         return extra
-
-    def update_data_var(self, fieldid, value):
-        model = {}
-        updateDotDict(model,fieldid, value)
-        self.update_data(model)
 
     def update_data(self, data):
         """
@@ -315,90 +291,6 @@ class Task(object,  metaclass=DeprecatedMetaTask):
         """
         self.data = DeepMerge.merge(self.data, data)
         data_log.info('Data update', extra=self.log_info())
-
-    def task_info(self):
-        """
-        Returns a dictionary of information about the current task, so that
-        we can give hints to the user about what kind of task we are working
-        with such as a looping task or a Parallel MultiInstance task
-        :returns: dictionary
-        """
-        default = {'is_looping': False,
-                   'is_sequential_mi': False,
-                   'is_parallel_mi': False,
-                   'mi_count': 0,
-                   'mi_index': 0}
-
-        miInfo = getattr(self.task_spec, "multiinstance_info", None)
-        if callable(miInfo):
-            return miInfo(self)
-        else:
-            return default
-
-    def terminate_loop(self):
-        """
-        Used in the case that we are working with a BPMN 'loop' task.
-        The task will loop, repeatedly asking for input until terminate_loop
-        is called on the task
-        """
-        if self.is_looping():
-            self.terminate_current_loop = True
-        else:
-            raise WorkflowException('The method terminate_loop should only be called in the case of a BPMN Loop Task',
-                                    task_spec=self)
-
-    def is_looping(self):
-        """Returns true if this is a looping task."""
-        islooping = getattr(self.task_spec, "is_loop_task", None)
-        if callable(islooping):
-            return self.task_spec.is_loop_task()
-        else:
-            return False
-
-    def set_children_future(self):
-        """
-        for a parallel gateway, we need to set up our
-        children so that the gateway figures out that it needs to join up
-        the inputs - otherwise our child process never gets marked as
-        'READY'
-        """
-
-        if not self.task_spec.task_should_set_children_future(self):
-            return
-
-        self.task_spec.task_will_set_children_future(self)
-
-        # now we set this one to execute
-
-        self._set_state(TaskState.MAYBE)
-        self._sync_children(self.task_spec.outputs)
-        for child in self.children:
-            child.set_children_future()
-
-    def find_children_by_name(self,name):
-        """
-        for debugging
-        """
-        return [x for x in self.workflow.task_tree if x.task_spec.name == name]
-
-    def reset_token(self, data, reset_data=False):
-        """
-        Resets the token to this task. This should allow a trip 'back in time'
-        as it were to items that have already been completed.
-        :type  reset_data: bool
-        :param reset_data: Do we want to have the data be where we left of in
-                           this task or not
-        """
-        self.internal_data = {}
-        if not reset_data and self.workflow.last_task and self.workflow.last_task.data:
-            # This is a little sly, the data that will get inherited should
-            # be from the last completed task, but we don't want to alter
-            # the tree, so we just set the parent's data to the given data.
-            self.parent.data = copy.deepcopy(data)
-        self.workflow.last_task = self.parent
-        self.set_children_future()  # this method actually fixes the problem
-        self._set_state(TaskState.FUTURE)
-        self.task_spec._update(self)
 
     def __iter__(self):
         return Task.Iterator(self)
@@ -437,9 +329,7 @@ class Task(object,  metaclass=DeprecatedMetaTask):
             self.children.remove(task)
 
     def _has_state(self, state):
-        """
-        Returns True if the Task has the given state flag set.
-        """
+        """Returns True if the Task has the given state flag set."""
         return (self.state & state) != 0
 
     def _is_finished(self):
@@ -450,6 +340,43 @@ class Task(object,  metaclass=DeprecatedMetaTask):
 
     def _is_definite(self):
         return self._has_state(TaskState.DEFINITE_MASK)
+
+    def set_children_future(self):
+        """
+        for a parallel gateway, we need to set up our
+        children so that the gateway figures out that it needs to join up
+        the inputs - otherwise our child process never gets marked as
+        'READY'
+        """
+        if not self.task_spec.task_should_set_children_future(self):
+            return
+
+        self.task_spec.task_will_set_children_future(self)
+
+        # now we set this one to execute
+        self._set_state(TaskState.MAYBE)
+        self._sync_children(self.task_spec.outputs)
+        for child in self.children:
+            child.set_children_future()
+
+    def reset_token(self, data, reset_data=False):
+        """
+        Resets the token to this task. This should allow a trip 'back in time'
+        as it were to items that have already been completed.
+        :type  reset_data: bool
+        :param reset_data: Do we want to have the data be where we left of in
+                           this task or not
+        """
+        self.internal_data = {}
+        if not reset_data and self.workflow.last_task and self.workflow.last_task.data:
+            # This is a little sly, the data that will get inherited should
+            # be from the last completed task, but we don't want to alter
+            # the tree, so we just set the parent's data to the given data.
+            self.parent.data = copy.deepcopy(data)
+        self.workflow.last_task = self.parent
+        self.set_children_future()  # this method actually fixes the problem
+        self._set_state(TaskState.FUTURE)
+        self.task_spec._update(self)
 
     def _add_child(self, task_spec, state=TaskState.MAYBE):
         """
@@ -462,16 +389,59 @@ class Task(object,  metaclass=DeprecatedMetaTask):
         :rtype:  Task
         :returns: The new child task.
         """
-        if task_spec is None:
-            raise ValueError(self, '_add_child() requires a TaskSpec')
         if self._is_predicted() and state & TaskState.PREDICTED_MASK == 0:
-            msg = 'Attempt to add non-predicted child to predicted task'
-            raise WorkflowException(msg, task_spec=self.task_spec)
+            raise WorkflowException('Attempt to add non-predicted child to predicted task', task_spec=self.task_spec)
         task = Task(self.workflow, task_spec, self, state=state)
         task.thread_id = self.thread_id
         if state == TaskState.READY:
             task._ready()
         return task
+
+    def _sync_children(self, task_specs, state=TaskState.MAYBE):
+        """
+        This method syncs up the task's children with the given list of task
+        specs. In other words::
+
+            - Add one child for each given TaskSpec, unless that child already
+              exists.
+            - Remove all children for which there is no spec in the given list,
+              unless it is a "triggered" task.
+        .. note::
+
+           It is an error if the task has a non-predicted child that is
+           not given in the TaskSpecs.
+
+        :type  task_specs: list(TaskSpec)
+        :param task_specs: The list of task specs that may become children.
+        :type  state: integer
+        :param state: The bitmask of states for the new children.
+        """
+        if task_specs is None:
+            raise ValueError('"task_specs" argument is None')
+        new_children = task_specs[:]
+
+        # Create a list of all children that are no longer needed.
+        unneeded_children = []
+        for child in self.children:
+            if child.triggered:
+                # Triggered tasks are never removed.
+                pass
+            elif child.task_spec in new_children:
+                # If the task already exists, remove it from to-be-added and update its state
+                new_children.remove(child.task_spec)
+                if not child._is_finished():
+                    child._set_state(state)
+            else:
+                if child._is_definite():
+                    # Definite tasks must not be removed, so they HAVE to be in the given task spec list.
+                    raise WorkflowException(f'removal of non-predicted child {child}', task_spec=self.task_spec)
+                unneeded_children.append(child)
+
+        # Update children accordingly
+        for child in unneeded_children:
+            self.children.remove(child)
+        for task_spec in new_children:
+            self._add_child(task_spec, state)
 
     def _assign_new_thread_id(self, recursive=True):
         """
@@ -489,78 +459,6 @@ class Task(object,  metaclass=DeprecatedMetaTask):
         for child in self:
             child.thread_id = self.thread_id
         return self.thread_id
-
-    def _sync_children(self, task_specs, state=TaskState.MAYBE):
-        """
-        This method syncs up the task's children with the given list of task
-        specs. In other words::
-
-            - Add one child for each given TaskSpec, unless that child already
-              exists.
-            - Remove all children for which there is no spec in the given list,
-              unless it is a "triggered" task.
-            - Handle looping back to previous tasks, so we don't end up with
-              an infinitely large tree.
-        .. note::
-
-           It is an error if the task has a non-predicted child that is
-           not given in the TaskSpecs.
-
-        :type  task_specs: list(TaskSpec)
-        :param task_specs: The list of task specs that may become children.
-        :type  state: integer
-        :param state: The bitmask of states for the new children.
-        """
-        if task_specs is None:
-            raise ValueError('"task_specs" argument is None')
-        new_children = task_specs[:]
-
-        # If a child task_spec is also an ancestor, we are looping back,
-        # replace those specs with a loopReset task.
-        root_task = self._get_root()
-        for index, task_spec in enumerate(new_children):
-            ancestor_task = self._find_ancestor(task_spec)
-            if ancestor_task and ancestor_task != root_task:
-                destination = ancestor_task
-                new_spec = self.workflow.get_reset_task_spec(destination)
-                new_spec.outputs = []
-                new_spec.inputs = task_spec.inputs
-                new_children[index] = new_spec
-
-        # Create a list of all children that are no longer needed.
-        unneeded_children = []
-        for child in self.children:
-            # Triggered tasks are never removed.
-            if child.triggered:
-                continue
-
-            # If the task already exists, remove it from to-be-added
-            if child.task_spec in new_children:
-                new_children.remove(child.task_spec)
-                # We should set the state here but that breaks everything
-                continue
-
-            # Definite tasks must not be removed, so they HAVE to be in the given task spec list.
-            if child._is_definite():
-                raise WorkflowException(f'removal of non-predicted child {child}', task_spec=self.task_spec)
-            unneeded_children.append(child)
-
-        # Remove and add the children accordingly.
-        for child in unneeded_children:
-            self.children.remove(child)
-        for task_spec in new_children:
-            self._add_child(task_spec, state)
-
-    def _set_likely_task(self, task_specs):
-        if not isinstance(task_specs, list):
-            task_specs = [task_specs]
-        for task_spec in task_specs:
-            for child in self.children:
-                if child.task_spec != task_spec:
-                    continue
-                if child._is_definite():
-                    continue
-                child._set_state(TaskState.LIKELY)
 
     def _is_descendant_of(self, parent):
         """
@@ -645,36 +543,17 @@ class Task(object,  metaclass=DeprecatedMetaTask):
             return self.parent
         return self.parent._find_ancestor_from_name(name)
 
-    def _ready(self):
-        """
-        Marks the task as ready for execution.
-        """
-        if self._has_state(TaskState.COMPLETED) or self._has_state(TaskState.CANCELLED):
-            return
-        self._set_state(TaskState.READY)
-        self.task_spec._on_ready(self)
-
     def get_name(self):
         return str(self.task_spec.name)
 
     def get_description(self):
         return str(self.task_spec.description)
 
-    def get_state(self):
-        """
-        Returns this Task's state.
-        """
-        return self.state
-
     def get_state_name(self):
-        """
-        Returns a textual representation of this Task's state.
-        """
-        state_name = []
+        """Returns a textual representation of this Task's state."""
         for state, name in list(TaskStateNames.items()):
             if self._has_state(state):
-                state_name.append(name)
-        return '|'.join(state_name)
+                return name
 
     def get_spec_data(self, name=None, default=None):
         """
@@ -725,36 +604,53 @@ class Task(object,  metaclass=DeprecatedMetaTask):
         """
         return self.data.get(name, default)
 
-    def cancel(self):
-        """
-        Cancels the item if it was not yet completed, and removes
-        any children that are LIKELY.
-        """
-        if self._is_finished():
-            for child in self.children:
-                child.cancel()
+    def _ready(self):
+        """Marks the task as ready for execution."""
+        if self._has_state(TaskState.COMPLETED) or self._has_state(TaskState.CANCELLED):
             return
-        self._set_state(TaskState.CANCELLED)
-        self._drop_children()
-        self.task_spec._on_cancel(self)
+        self._set_state(TaskState.READY)
+        self.task_spec._on_ready(self)
 
-    def complete(self):
+    def run(self):
         """
-        Called by the associated task to let us know that its state
-        has changed (e.g. from FUTURE to COMPLETED.)
+        Execute the task.
+
+        If the return value of task_spec._run is None, assume the task is not finished, 
+        and move the task to WAITING.
+
+        :rtype: boolean or None
+        :returns: the value returned by the task spec's run method
         """
-        self._set_state(TaskState.COMPLETED)
-        # I am taking back my previous comment about running the task after it's completed being "CRAZY"
-        # Turns out that tasks are in fact supposed to be complete at this point and I've been wrong all along
-        # about when tasks should actually be executed
         start = time.time()
-        retval = self.task_spec._on_complete(self)
+        retval = self.task_spec._run(self)
         extra = self.log_info({
             'action': 'Complete',
             'elapsed': time.time() - start
         })
         metrics.debug('', extra=extra)
+        if retval is None:
+            self._set_state(TaskState.WAITING)
+        else:
+            # If we add an error state, the we can move the task to COMPLETE or ERROR
+            # according to the return value.
+            self.complete()
         return retval
+
+    def cancel(self):
+        """Cancels the item if it was not yet completed, and removes any children that are LIKELY."""
+        if self._is_finished():
+            for child in self.children:
+                child.cancel()
+        else:
+            self._set_state(TaskState.CANCELLED)
+            self._drop_children()
+            self.task_spec._on_cancel(self)
+
+    def complete(self):
+        """Marks this task complete."""
+        self._set_state(TaskState.COMPLETED)
+        self.task_spec._on_complete(self)
+        self.workflow.last_task = self
 
     def trigger(self, *args):
         """

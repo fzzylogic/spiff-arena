@@ -1,9 +1,7 @@
 """APIs for dealing with process groups, process models, and process instances."""
-import base64
 import json
 from typing import Any
 from typing import Dict
-from typing import Optional
 
 import flask.wrappers
 from flask import Blueprint
@@ -18,18 +16,19 @@ from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.exceptions.process_entity_not_found_error import (
     ProcessEntityNotFoundError,
 )
-from spiffworkflow_backend.models.db import db
 from spiffworkflow_backend.models.principal import PrincipalModel
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModel
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModelSchema
-from spiffworkflow_backend.models.process_instance import (
-    ProcessInstanceTaskDataCannotBeUpdatedError,
+from spiffworkflow_backend.models.process_instance_file_data import (
+    ProcessInstanceFileDataModel,
 )
 from spiffworkflow_backend.models.process_model import ProcessModelInfo
 from spiffworkflow_backend.models.spec_reference import SpecReferenceCache
 from spiffworkflow_backend.models.spec_reference import SpecReferenceSchema
+from spiffworkflow_backend.models.task import TaskModel  # noqa: F401
 from spiffworkflow_backend.services.authorization_service import AuthorizationService
 from spiffworkflow_backend.services.git_service import GitService
+from spiffworkflow_backend.services.process_caller_service import ProcessCallerService
 from spiffworkflow_backend.services.process_instance_processor import (
     ProcessInstanceProcessor,
 )
@@ -45,9 +44,7 @@ def permissions_check(body: Dict[str, Dict[str, list[str]]]) -> flask.wrappers.R
         raise (
             ApiError(
                 error_code="could_not_requests_to_check",
-                message=(
-                    "The key 'requests_to_check' not found at root of request body."
-                ),
+                message="The key 'requests_to_check' not found at root of request body.",
                 status_code=400,
             )
         )
@@ -59,9 +56,7 @@ def permissions_check(body: Dict[str, Dict[str, list[str]]]) -> flask.wrappers.R
             response_dict[target_uri] = {}
 
         for http_method in http_methods:
-            permission_string = AuthorizationService.get_permission_from_http_method(
-                http_method
-            )
+            permission_string = AuthorizationService.get_permission_from_http_method(http_method)
             if permission_string:
                 has_permission = AuthorizationService.user_has_permission(
                     user=g.user,
@@ -83,40 +78,48 @@ def process_list() -> Any:
     return SpecReferenceSchema(many=True).dump(references)
 
 
+def process_caller_lists(bpmn_process_identifier: str) -> Any:
+    callers = ProcessCallerService.callers(bpmn_process_identifier)
+    references = (
+        SpecReferenceCache.query.filter_by(type="process").filter(SpecReferenceCache.identifier.in_(callers)).all()
+    )
+    return SpecReferenceSchema(many=True).dump(references)
+
+
 def _process_data_fetcher(
     process_instance_id: int,
     process_data_identifier: str,
-    modified_process_model_identifier: str,
     download_file_data: bool,
-    index: Optional[int] = None,
 ) -> flask.wrappers.Response:
     """Process_data_show."""
-    process_instance = _find_process_instance_by_id_or_raise(process_instance_id)
-    processor = ProcessInstanceProcessor(process_instance)
-    all_process_data = processor.get_data()
-    process_data_value = None
-    if process_data_identifier in all_process_data:
-        process_data_value = all_process_data[process_data_identifier]
-
-    if process_data_value is not None and index is not None:
-        process_data_value = process_data_value[index]
-
-    if (
-        download_file_data
-        and isinstance(process_data_value, str)
-        and process_data_value.startswith("data:")
-    ):
-        parts = process_data_value.split(";")
-        mimetype = parts[0][4:]
-        filename = parts[1]
-        base64_value = parts[2].split(",")[1]
-        file_contents = base64.b64decode(base64_value)
+    if download_file_data:
+        file_data = ProcessInstanceFileDataModel.query.filter_by(
+            digest=process_data_identifier,
+            process_instance_id=process_instance_id,
+        ).first()
+        if file_data is None:
+            raise ApiError(
+                error_code="process_instance_file_data_not_found",
+                message=f"Could not find file data related to the digest: {process_data_identifier}",
+            )
+        mimetype = file_data.mimetype
+        filename = file_data.filename
+        file_contents = file_data.contents
 
         return Response(
             file_contents,
             mimetype=mimetype,
             headers={"Content-disposition": f"attachment; filename={filename}"},
         )
+
+    process_instance = _find_process_instance_by_id_or_raise(process_instance_id)
+    processor = ProcessInstanceProcessor(process_instance)
+    all_process_data = processor.get_data()
+    process_data_value = all_process_data.get(process_data_identifier)
+
+    if process_data_value is None:
+        script_engine_last_result = processor._script_engine.environment.last_result()
+        process_data_value = script_engine_last_result.get(process_data_identifier)
 
     return make_response(
         jsonify(
@@ -138,9 +141,7 @@ def process_data_show(
     return _process_data_fetcher(
         process_instance_id,
         process_data_identifier,
-        modified_process_model_identifier,
-        False,
-        None,
+        download_file_data=False,
     )
 
 
@@ -148,15 +149,12 @@ def process_data_file_download(
     process_instance_id: int,
     process_data_identifier: str,
     modified_process_model_identifier: str,
-    index: Optional[int] = None,
 ) -> flask.wrappers.Response:
     """Process_data_file_download."""
     return _process_data_fetcher(
         process_instance_id,
         process_data_identifier,
-        modified_process_model_identifier,
-        True,
-        index,
+        download_file_data=True,
     )
 
 
@@ -170,67 +168,7 @@ def github_webhook_receive(body: Dict) -> Response:
     auth_header = request.headers.get("X-Hub-Signature-256")
     AuthorizationService.verify_sha256_token(auth_header)
     result = GitService.handle_web_hook(body)
-    return Response(
-        json.dumps({"git_pull": result}), status=200, mimetype="application/json"
-    )
-
-
-def task_data_update(
-    process_instance_id: str,
-    modified_process_model_identifier: str,
-    task_id: str,
-    body: Dict,
-) -> Response:
-    """Update task data."""
-    process_instance = ProcessInstanceModel.query.filter(
-        ProcessInstanceModel.id == int(process_instance_id)
-    ).first()
-    if process_instance:
-        if process_instance.status != "suspended":
-            raise ProcessInstanceTaskDataCannotBeUpdatedError(
-                "The process instance needs to be suspended to udpate the task-data."
-                f" It is currently: {process_instance.status}"
-            )
-
-        process_instance_bpmn_json_dict = json.loads(process_instance.bpmn_json)
-        if "new_task_data" in body:
-            new_task_data_str: str = body["new_task_data"]
-            new_task_data_dict = json.loads(new_task_data_str)
-            if task_id in process_instance_bpmn_json_dict["tasks"]:
-                process_instance_bpmn_json_dict["tasks"][task_id][
-                    "data"
-                ] = new_task_data_dict
-                process_instance.bpmn_json = json.dumps(process_instance_bpmn_json_dict)
-                db.session.add(process_instance)
-                try:
-                    db.session.commit()
-                except Exception as e:
-                    db.session.rollback()
-                    raise ApiError(
-                        error_code="update_task_data_error",
-                        message=f"Could not update the Instance. Original error is {e}",
-                    ) from e
-            else:
-                raise ApiError(
-                    error_code="update_task_data_error",
-                    message=(
-                        f"Could not find Task: {task_id} in Instance:"
-                        f" {process_instance_id}."
-                    ),
-                )
-    else:
-        raise ApiError(
-            error_code="update_task_data_error",
-            message=(
-                f"Could not update task data for Instance: {process_instance_id}, and"
-                f" Task: {task_id}."
-            ),
-        )
-    return Response(
-        json.dumps(ProcessInstanceModelSchema().dump(process_instance)),
-        status=200,
-        mimetype="application/json",
-    )
+    return Response(json.dumps({"git_pull": result}), status=200, mimetype="application/json")
 
 
 def _get_required_parameter_or_raise(parameter: str, post_body: dict[str, Any]) -> Any:
@@ -257,9 +195,7 @@ def send_bpmn_event(
     body: Dict,
 ) -> Response:
     """Send a bpmn event to a workflow."""
-    process_instance = ProcessInstanceModel.query.filter(
-        ProcessInstanceModel.id == int(process_instance_id)
-    ).first()
+    process_instance = ProcessInstanceModel.query.filter(ProcessInstanceModel.id == int(process_instance_id)).first()
     if process_instance:
         processor = ProcessInstanceProcessor(process_instance)
         processor.send_bpmn_event(body)
@@ -267,34 +203,6 @@ def send_bpmn_event(
         raise ApiError(
             error_code="send_bpmn_event_error",
             message=f"Could not send event to Instance: {process_instance_id}",
-        )
-    return Response(
-        json.dumps(ProcessInstanceModelSchema().dump(process_instance)),
-        status=200,
-        mimetype="application/json",
-    )
-
-
-def manual_complete_task(
-    modified_process_model_identifier: str,
-    process_instance_id: str,
-    task_id: str,
-    body: Dict,
-) -> Response:
-    """Mark a task complete without executing it."""
-    execute = body.get("execute", True)
-    process_instance = ProcessInstanceModel.query.filter(
-        ProcessInstanceModel.id == int(process_instance_id)
-    ).first()
-    if process_instance:
-        processor = ProcessInstanceProcessor(process_instance)
-        processor.manual_complete_task(task_id, execute)
-    else:
-        raise ApiError(
-            error_code="complete_task",
-            message=(
-                f"Could not complete Task {task_id} in Instance {process_instance_id}"
-            ),
         )
     return Response(
         json.dumps(ProcessInstanceModelSchema().dump(process_instance)),
@@ -321,9 +229,7 @@ def _find_process_instance_by_id_or_raise(
     process_instance_id: int,
 ) -> ProcessInstanceModel:
     """Find_process_instance_by_id_or_raise."""
-    process_instance_query = ProcessInstanceModel.query.filter_by(
-        id=process_instance_id
-    )
+    process_instance_query = ProcessInstanceModel.query.filter_by(id=process_instance_id)
 
     # we had a frustrating session trying to do joins and access columns from two tables. here's some notes for our future selves:
     # this returns an object that allows you to do: process_instance.UserModel.username

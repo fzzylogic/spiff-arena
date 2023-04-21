@@ -158,11 +158,11 @@ describe('process-instances', () => {
     // make sure we have some process instances
     cy.runPrimaryBpmnFile();
     cy.getBySel('process-instance-list-link').click();
-    cy.getBySel('process-instance-show-link').first().click();
+    cy.getBySel('process-instance-show-link-id').first().click();
     cy.getBySel('process-instance-log-list-link').click();
     cy.getBySel('process-instance-log-detailed').click();
     cy.contains('process_model_one');
-    cy.contains('State change to COMPLETED');
+    cy.contains('task_completed');
     cy.basicPaginationTest();
   });
 
@@ -179,13 +179,17 @@ describe('process-instances', () => {
         cy.get(statusSelect).contains(processStatus).click();
         cy.get(statusSelect).click();
         cy.getBySel('filter-button').click();
-        // FIXME: wait a little bit for the useEffects to be able to fully set processInstanceFilters
-        cy.wait(1000);
         cy.url().should('include', `status=${processStatus}`);
         cy.assertAtLeastOneItemInPaginatedResults();
         cy.getBySel(`process-instance-status-${processStatus}`);
+
+        // maybe waiting a bit before trying to click makes this work consistently?
+        cy.wait(1000);
         // there should really only be one, but in CI there are sometimes more
         cy.get('div[aria-label="Clear all selected items"]:first').click();
+        cy.get('div[aria-label="Clear all selected items"]').should(
+          'not.exist'
+        );
       }
     });
 

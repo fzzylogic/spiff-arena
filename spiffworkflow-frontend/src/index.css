@@ -14,6 +14,27 @@
   width: 5rem;
 }
 
+.cds--header__action.spiff-environment-header-text {
+  width: 5rem;
+  color: #126d82;
+}
+
+.cds--header__action.unclickable-text:hover {
+  background-color: #161616;
+  cursor: default;
+}
+.cds--header__action.unclickable-text:focus {
+  border: none;
+  box-shadow: none;
+  border-color: none;
+}
+
+/* make this a little less prominent so the actual human beings completing tasks stand out */
+.system-user-log-entry {
+  color: #B0B0B0;
+  font-style: italic;
+}
+
 h1 {
   font-weight: 400;
   font-size: 28px;
@@ -120,6 +141,14 @@ code {
 .completed-task-highlight:not(.djs-connection) .djs-visual > :nth-child(1) {
   fill: grey !important;
   opacity: .4;
+}
+.cancelled-task-highlight:not(.djs-connection) .djs-visual > :nth-child(1) {
+  fill: blue !important;
+  opacity: .2;
+}
+.errored-task-highlight:not(.djs-connection) .djs-visual > :nth-child(1) {
+  fill: red !important;
+  opacity: .2;
 }
 
 .accordion-item-label {
@@ -311,10 +340,13 @@ td.actions-cell {
   width: 1em;
 }
 
+.process-instance-table-header {
+  margin-bottom: 1em;
+}
+
 .no-results-message {
   font-style: italic;
   margin-left: 2em;
-  margin-top: 1em;
   font-size: 14px;
 }
 
@@ -386,4 +418,9 @@ svg.notification-icon {
   width: 100px;
   text-align: right;
   margin-right: 10px;
+}
+
+.please-press-filter-button {
+  margin-bottom: 1em;
+  font-weight: bold;
 }

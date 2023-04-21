@@ -76,8 +76,9 @@ PATH_SEGMENTS_FOR_PERMISSION_ALL = [
     },
     {"path": "/process-instance-suspend", "relevant_permissions": ["create"]},
     {"path": "/process-instance-terminate", "relevant_permissions": ["create"]},
-    {"path": "/task-data", "relevant_permissions": ["read", "update"]},
     {"path": "/process-data", "relevant_permissions": ["read"]},
+    {"path": "/process-data-file-download", "relevant_permissions": ["read"]},
+    {"path": "/task-data", "relevant_permissions": ["read", "update"]},
 ]
 
 
@@ -107,9 +108,7 @@ class AuthorizationService:
             )
 
         received_sign = auth_header.split("sha256=")[-1].strip()
-        secret = current_app.config[
-            "SPIFFWORKFLOW_BACKEND_GITHUB_WEBHOOK_SECRET"
-        ].encode()
+        secret = current_app.config["SPIFFWORKFLOW_BACKEND_GITHUB_WEBHOOK_SECRET"].encode()
         expected_sign = HMAC(key=secret, msg=request.data, digestmod=sha256).hexdigest()
         if not compare_digest(received_sign, expected_sign):
             raise TokenInvalidError(
@@ -117,17 +116,13 @@ class AuthorizationService:
             )
 
     @classmethod
-    def has_permission(
-        cls, principals: list[PrincipalModel], permission: str, target_uri: str
-    ) -> bool:
+    def has_permission(cls, principals: list[PrincipalModel], permission: str, target_uri: str) -> bool:
         """Has_permission."""
         principal_ids = [p.id for p in principals]
         target_uri_normalized = target_uri.removeprefix(V1_API_PATH_PREFIX)
 
         permission_assignments = (
-            PermissionAssignmentModel.query.filter(
-                PermissionAssignmentModel.principal_id.in_(principal_ids)
-            )
+            PermissionAssignmentModel.query.filter(PermissionAssignmentModel.principal_id.in_(principal_ids))
             .filter_by(permission=permission)
             .join(PermissionTargetModel)
             .filter(
@@ -135,10 +130,7 @@ class AuthorizationService:
                     text(f"'{target_uri_normalized}' LIKE permission_target.uri"),
                     # to check for exact matches as well
                     # see test_user_can_access_base_path_when_given_wildcard_permission unit test
-                    text(
-                        f"'{target_uri_normalized}' ="
-                        " replace(replace(permission_target.uri, '/%', ''), ':%', '')"
-                    ),
+                    text(f"'{target_uri_normalized}' = replace(replace(permission_target.uri, '/%', ''), ':%', '')"),
                 )
             )
             .all()
@@ -149,29 +141,21 @@ class AuthorizationService:
             elif permission_assignment.grant_type == "deny":
                 return False
             else:
-                raise Exception(
-                    f"Unknown grant type: {permission_assignment.grant_type}"
-                )
+                raise Exception(f"Unknown grant type: {permission_assignment.grant_type}")
 
         return False
 
     @classmethod
-    def user_has_permission(
-        cls, user: UserModel, permission: str, target_uri: str
-    ) -> bool:
+    def user_has_permission(cls, user: UserModel, permission: str, target_uri: str) -> bool:
         """User_has_permission."""
         if user.principal is None:
-            raise MissingPrincipalError(
-                f"Missing principal for user with id: {user.id}"
-            )
+            raise MissingPrincipalError(f"Missing principal for user with id: {user.id}")
 
         principals = [user.principal]
 
         for group in user.groups:
             if group.principal is None:
-                raise MissingPrincipalError(
-                    f"Missing principal for group with id: {group.id}"
-                )
+                raise MissingPrincipalError(f"Missing principal for group with id: {group.id}")
             principals.append(group.principal)
 
         return cls.has_permission(principals, permission, target_uri)
@@ -190,26 +174,19 @@ class AuthorizationService:
     @classmethod
     def associate_user_with_group(cls, user: UserModel, group: GroupModel) -> None:
         """Associate_user_with_group."""
-        user_group_assignemnt = UserGroupAssignmentModel.query.filter_by(
-            user_id=user.id, group_id=group.id
-        ).first()
+        user_group_assignemnt = UserGroupAssignmentModel.query.filter_by(user_id=user.id, group_id=group.id).first()
         if user_group_assignemnt is None:
-            user_group_assignemnt = UserGroupAssignmentModel(
-                user_id=user.id, group_id=group.id
-            )
+            user_group_assignemnt = UserGroupAssignmentModel(user_id=user.id, group_id=group.id)
             db.session.add(user_group_assignemnt)
             db.session.commit()
 
     @classmethod
-    def import_permissions_from_yaml_file(
-        cls, raise_if_missing_user: bool = False
-    ) -> DesiredPermissionDict:
+    def import_permissions_from_yaml_file(cls, raise_if_missing_user: bool = False) -> DesiredPermissionDict:
         """Import_permissions_from_yaml_file."""
         if current_app.config["SPIFFWORKFLOW_BACKEND_PERMISSIONS_FILE_NAME"] is None:
             raise (
                 PermissionsFileNotSetError(
-                    "SPIFFWORKFLOW_BACKEND_PERMISSIONS_FILE_NAME needs to be set in"
-                    " order to import permissions"
+                    "SPIFFWORKFLOW_BACKEND_PERMISSIONS_FILE_NAME needs to be set in order to import permissions"
                 )
             )
 
@@ -233,11 +210,7 @@ class AuthorizationService:
                     user = UserModel.query.filter_by(username=username).first()
                     if user is None:
                         if raise_if_missing_user:
-                            raise (
-                                UserNotFoundError(
-                                    f"Could not find a user with name: {username}"
-                                )
-                            )
+                            raise (UserNotFoundError(f"Could not find a user with name: {username}"))
                         continue
                     user_to_group_dict: UserToGroupDict = {
                         "username": user.username,
@@ -248,9 +221,7 @@ class AuthorizationService:
 
         permission_assignments = []
         if "permissions" in permission_configs:
-            for _permission_identifier, permission_config in permission_configs[
-                "permissions"
-            ].items():
+            for _permission_identifier, permission_config in permission_configs["permissions"].items():
                 uri = permission_config["uri"]
                 permission_target = cls.find_or_create_permission_target(uri)
 
@@ -271,9 +242,7 @@ class AuthorizationService:
                             user = UserModel.query.filter_by(username=username).first()
                             if user is not None:
                                 principal = (
-                                    PrincipalModel.query.join(UserModel)
-                                    .filter(UserModel.username == username)
-                                    .first()
+                                    PrincipalModel.query.join(UserModel).filter(UserModel.username == username).first()
                                 )
                                 permission_assignments.append(
                                     cls.create_permission_for_principal(
@@ -296,9 +265,9 @@ class AuthorizationService:
         """Find_or_create_permission_target."""
         uri_with_percent = re.sub(r"\*", "%", uri)
         target_uri_normalized = uri_with_percent.removeprefix(V1_API_PATH_PREFIX)
-        permission_target: Optional[PermissionTargetModel] = (
-            PermissionTargetModel.query.filter_by(uri=target_uri_normalized).first()
-        )
+        permission_target: Optional[PermissionTargetModel] = PermissionTargetModel.query.filter_by(
+            uri=target_uri_normalized
+        ).first()
         if permission_target is None:
             permission_target = PermissionTargetModel(uri=target_uri_normalized)
             db.session.add(permission_target)
@@ -313,13 +282,11 @@ class AuthorizationService:
         permission: str,
     ) -> PermissionAssignmentModel:
         """Create_permission_for_principal."""
-        permission_assignment: Optional[PermissionAssignmentModel] = (
-            PermissionAssignmentModel.query.filter_by(
-                principal_id=principal.id,
-                permission_target_id=permission_target.id,
-                permission=permission,
-            ).first()
-        )
+        permission_assignment: Optional[PermissionAssignmentModel] = PermissionAssignmentModel.query.filter_by(
+            principal_id=principal.id,
+            permission_target_id=permission_target.id,
+            permission=permission,
+        ).first()
         if permission_assignment is None:
             permission_assignment = PermissionAssignmentModel(
                 principal_id=principal.id,
@@ -356,6 +323,8 @@ class AuthorizationService:
             api_view_function
             and api_view_function.__name__.startswith("login")
             or api_view_function.__name__.startswith("logout")
+            or api_view_function.__name__.startswith("prom")
+            or api_view_function.__name__.startswith("metric")
             or api_view_function.__name__.startswith("console_ui_")
             or api_view_function.__name__ in authentication_exclusion_list
             or api_view_function.__name__ in swagger_functions
@@ -399,10 +368,7 @@ class AuthorizationService:
             )
 
         api_view_function = current_app.view_functions[request.endpoint]
-        if (
-            api_view_function
-            and api_view_function.__name__ in authorization_exclusion_list
-        ):
+        if api_view_function and api_view_function.__name__ in authorization_exclusion_list:
             return None
 
         permission_string = cls.get_permission_from_http_method(request.method)
@@ -442,10 +408,7 @@ class AuthorizationService:
             ) from exception
         except jwt.InvalidTokenError as exception:
             raise TokenInvalidError(
-                (
-                    "The Authentication token you provided is invalid. You need a new"
-                    " token. "
-                ),
+                "The Authentication token you provided is invalid. You need a new token. ",
             ) from exception
 
     @staticmethod
@@ -481,11 +444,6 @@ class AuthorizationService:
         """Profile, picture, website, gender, birthdate, zoneinfo, locale, and updated_at. """
         """Email."""
         is_new_user = False
-        user_model = (
-            UserModel.query.filter(UserModel.service == user_info["iss"])
-            .filter(UserModel.service_id == user_info["sub"])
-            .first()
-        )
         user_attributes = {}
 
         if "email" in user_info:
@@ -510,9 +468,14 @@ class AuthorizationService:
         ):
             if tenant_specific_field in user_info:
                 field_number = field_index + 1
-                user_attributes[f"tenant_specific_field_{field_number}"] = user_info[
-                    tenant_specific_field
-                ]
+                user_attributes[f"tenant_specific_field_{field_number}"] = user_info[tenant_specific_field]
+
+        # example value for service: http://localhost:7002/realms/spiffworkflow (keycloak url)
+        user_model = (
+            UserModel.query.filter(UserModel.service == user_attributes["service"])
+            .filter(UserModel.username == user_attributes["username"])
+            .first()
+        )
 
         if user_model is None:
             current_app.logger.debug("create_user in login_return")
@@ -564,37 +527,35 @@ class AuthorizationService:
         #   2. view the logs for these instances.
         if permission_set == "start":
             target_uri = f"/process-instances/{process_related_path_segment}"
-            permissions_to_assign.append(
-                PermissionToAssign(permission="create", target_uri=target_uri)
-            )
-            target_uri = f"/process-instances/for-me/{process_related_path_segment}"
-            permissions_to_assign.append(
-                PermissionToAssign(permission="read", target_uri=target_uri)
-            )
-            target_uri = f"/logs/{process_related_path_segment}"
-            permissions_to_assign.append(
-                PermissionToAssign(permission="read", target_uri=target_uri)
-            )
+            permissions_to_assign.append(PermissionToAssign(permission="create", target_uri=target_uri))
 
+            # giving people access to all logs for an instance actually gives them a little bit more access
+            # than would be optimal. ideally, you would only be able to view the logs for instances that you started
+            # or that you need to approve, etc. we could potentially implement this by adding before filters
+            # in the controllers that confirm that you are viewing logs for your instances. i guess you need to check
+            # both for-me and NOT for-me URLs for the instance in question to see if you should get access to its logs.
+            # if we implemented things this way, there would also be no way to restrict access to logs when you do not
+            # restrict access to instances. everything would be inheriting permissions from instances.
+            # if we want to really codify this rule, we could change logs from a prefix to a suffix
+            #   (just add it to the end of the process instances path).
+            # but that makes it harder to change our minds in the future.
+            for target_uri in [
+                f"/process-instances/for-me/{process_related_path_segment}",
+                f"/logs/{process_related_path_segment}",
+                f"/process-data-file-download/{process_related_path_segment}",
+            ]:
+                permissions_to_assign.append(PermissionToAssign(permission="read", target_uri=target_uri))
         else:
             if permission_set == "all":
                 for path_segment_dict in PATH_SEGMENTS_FOR_PERMISSION_ALL:
-                    target_uri = (
-                        f"{path_segment_dict['path']}/{process_related_path_segment}"
-                    )
+                    target_uri = f"{path_segment_dict['path']}/{process_related_path_segment}"
                     relevant_permissions = path_segment_dict["relevant_permissions"]
                     for permission in relevant_permissions:
-                        permissions_to_assign.append(
-                            PermissionToAssign(
-                                permission=permission, target_uri=target_uri
-                            )
-                        )
+                        permissions_to_assign.append(PermissionToAssign(permission=permission, target_uri=target_uri))
 
             for target_uri in target_uris:
                 for permission in permissions:
-                    permissions_to_assign.append(
-                        PermissionToAssign(permission=permission, target_uri=target_uri)
-                    )
+                    permissions_to_assign.append(PermissionToAssign(permission=permission, target_uri=target_uri))
 
         return permissions_to_assign
 
@@ -602,48 +563,28 @@ class AuthorizationService:
     def set_basic_permissions(cls) -> list[PermissionToAssign]:
         """Set_basic_permissions."""
         permissions_to_assign: list[PermissionToAssign] = []
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/process-instances/for-me"))
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/processes"))
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/service-tasks"))
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/user-groups/for-current-user"))
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/logs/types"))
+        permissions_to_assign.append(PermissionToAssign(permission="create", target_uri="/users/exists/by-username"))
         permissions_to_assign.append(
-            PermissionToAssign(
-                permission="read", target_uri="/process-instances/for-me"
-            )
-        )
-        permissions_to_assign.append(
-            PermissionToAssign(permission="read", target_uri="/processes")
-        )
-        permissions_to_assign.append(
-            PermissionToAssign(permission="read", target_uri="/service-tasks")
-        )
-        permissions_to_assign.append(
-            PermissionToAssign(
-                permission="read", target_uri="/user-groups/for-current-user"
-            )
-        )
-        permissions_to_assign.append(
-            PermissionToAssign(
-                permission="read", target_uri="/process-instances/find-by-id/*"
-            )
+            PermissionToAssign(permission="read", target_uri="/process-instances/find-by-id/*")
         )
 
         for permission in ["create", "read", "update", "delete"]:
             permissions_to_assign.append(
-                PermissionToAssign(
-                    permission=permission, target_uri="/process-instances/reports/*"
-                )
+                PermissionToAssign(permission=permission, target_uri="/process-instances/reports/*")
             )
-            permissions_to_assign.append(
-                PermissionToAssign(permission=permission, target_uri="/tasks/*")
-            )
+            permissions_to_assign.append(PermissionToAssign(permission=permission, target_uri="/tasks/*"))
         return permissions_to_assign
 
     @classmethod
-    def set_process_group_permissions(
-        cls, target: str, permission_set: str
-    ) -> list[PermissionToAssign]:
+    def set_process_group_permissions(cls, target: str, permission_set: str) -> list[PermissionToAssign]:
         """Set_process_group_permissions."""
         permissions_to_assign: list[PermissionToAssign] = []
-        process_group_identifier = (
-            target.removeprefix("PG:").replace("/", ":").removeprefix(":")
-        )
+        process_group_identifier = target.removeprefix("PG:").replace("/", ":").removeprefix(":")
         process_related_path_segment = f"{process_group_identifier}:*"
         if process_group_identifier == "ALL":
             process_related_path_segment = "*"
@@ -657,14 +598,10 @@ class AuthorizationService:
         return permissions_to_assign
 
     @classmethod
-    def set_process_model_permissions(
-        cls, target: str, permission_set: str
-    ) -> list[PermissionToAssign]:
+    def set_process_model_permissions(cls, target: str, permission_set: str) -> list[PermissionToAssign]:
         """Set_process_model_permissions."""
         permissions_to_assign: list[PermissionToAssign] = []
-        process_model_identifier = (
-            target.removeprefix("PM:").replace("/", ":").removeprefix(":")
-        )
+        process_model_identifier = target.removeprefix("PM:").replace("/", ":").removeprefix(":")
         process_related_path_segment = f"{process_model_identifier}/*"
 
         if process_model_identifier == "ALL":
@@ -677,9 +614,7 @@ class AuthorizationService:
         return permissions_to_assign
 
     @classmethod
-    def explode_permissions(
-        cls, permission_set: str, target: str
-    ) -> list[PermissionToAssign]:
+    def explode_permissions(cls, permission_set: str, target: str) -> list[PermissionToAssign]:
         """Explodes given permissions to and returns list of PermissionToAssign objects.
 
         These can be used to then iterate through and inserted into the database.
@@ -706,30 +641,20 @@ class AuthorizationService:
             permissions = ["create", "read", "update", "delete"]
 
         if target.startswith("PG:"):
-            permissions_to_assign += cls.set_process_group_permissions(
-                target, permission_set
-            )
+            permissions_to_assign += cls.set_process_group_permissions(target, permission_set)
         elif target.startswith("PM:"):
-            permissions_to_assign += cls.set_process_model_permissions(
-                target, permission_set
-            )
+            permissions_to_assign += cls.set_process_model_permissions(target, permission_set)
         elif permission_set == "start":
-            raise InvalidPermissionError(
-                "Permission 'start' is only available for macros PM and PG."
-            )
+            raise InvalidPermissionError("Permission 'start' is only available for macros PM and PG.")
 
         elif target.startswith("BASIC"):
             permissions_to_assign += cls.set_basic_permissions()
         elif target == "ALL":
             for permission in permissions:
-                permissions_to_assign.append(
-                    PermissionToAssign(permission=permission, target_uri="/*")
-                )
+                permissions_to_assign.append(PermissionToAssign(permission=permission, target_uri="/*"))
         elif target.startswith("/"):
             for permission in permissions:
-                permissions_to_assign.append(
-                    PermissionToAssign(permission=permission, target_uri=target)
-                )
+                permissions_to_assign.append(PermissionToAssign(permission=permission, target_uri=target))
         else:
             raise InvalidPermissionError(
                 f"Target uri '{target}' with permission set '{permission_set}' is"
@@ -748,9 +673,7 @@ class AuthorizationService:
         permissions_to_assign = cls.explode_permissions(permission, target)
         permission_assignments = []
         for permission_to_assign in permissions_to_assign:
-            permission_target = cls.find_or_create_permission_target(
-                permission_to_assign.target_uri
-            )
+            permission_target = cls.find_or_create_permission_target(permission_to_assign.target_uri)
             permission_assignments.append(
                 cls.create_permission_for_principal(
                     group.principal, permission_target, permission_to_assign.permission
@@ -776,9 +699,7 @@ class AuthorizationService:
                     "group_identifier": group_identifier,
                 }
                 desired_user_to_group_identifiers.append(user_to_group_dict)
-                GroupService.add_user_to_group_or_add_to_waiting(
-                    username, group_identifier
-                )
+                GroupService.add_user_to_group_or_add_to_waiting(username, group_identifier)
                 desired_group_identifiers.add(group_identifier)
             for permission in group["permissions"]:
                 for crud_op in permission["actions"]:
@@ -799,8 +720,7 @@ class AuthorizationService:
             # do not remove users from the default user group
             if (
                 current_app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"] is None
-                or current_app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"]
-                != iutga.group.identifier
+                or current_app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"] != iutga.group.identifier
             ):
                 current_user_dict: UserToGroupDict = {
                     "username": iutga.user.username,
@@ -810,12 +730,8 @@ class AuthorizationService:
                     db.session.delete(iutga)
 
         # do not remove the default user group
-        desired_group_identifiers.add(
-            current_app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"]
-        )
-        groups_to_delete = GroupModel.query.filter(
-            GroupModel.identifier.not_in(desired_group_identifiers)
-        ).all()
+        desired_group_identifiers.add(current_app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"])
+        groups_to_delete = GroupModel.query.filter(GroupModel.identifier.not_in(desired_group_identifiers)).all()
         for gtd in groups_to_delete:
             db.session.delete(gtd)
         db.session.commit()

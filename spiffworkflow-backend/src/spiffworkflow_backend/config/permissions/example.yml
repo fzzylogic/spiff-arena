@@ -28,6 +28,13 @@ groups:
     users:
       [
         admin@spiffworkflow.org,
+        nelson@spiffworkflow.org
+      ]
+  approvers:
+    users:
+      [
+        malala@spiffworkflow.org,
+        oskar@spiffworkflow.org
       ]
 
 permissions:
@@ -44,6 +51,13 @@ permissions:
     users: []
     allowed_permissions: [create, read, update, delete]
     uri: /tasks/*
+
+  # Everybody can start all intstances
+  create-test-instances:
+    groups: [ everybody ]
+    users: [ ]
+    allowed_permissions: [ create ]
+    uri: /process-instances/*
 
   # Everyone can see everything (all groups, and processes are visible)
   read-all-process-groups:

@@ -117,7 +117,7 @@ class Celery(TaskSpec):
         self.call = call or []
         self.args = call_args or {}
         self.merge_results = merge_results
-        skip = 'data', 'defines', 'pre_assign', 'post_assign', 'lock'
+        skip = 'data', 'defines', 'pre_assign', 'post_assign'
         self.kwargs = dict(i for i in list(kwargs.items()) if i[0] not in skip)
         self.result_key = result_key
 
@@ -245,6 +245,7 @@ class Celery(TaskSpec):
             return False
 
     def _update_hook(self, my_task):
+        super()._update_hook(my_task)
         if not self._start(my_task):
             if not my_task._has_state(TaskState.WAITING):
                 my_task._set_state(TaskState.WAITING)

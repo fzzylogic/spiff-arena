@@ -1,6 +1,7 @@
 import { string } from 'prop-types';
 import { modifyProcessIdentifierForPathParam } from '../../src/helpers';
 import { miscDisplayName } from './helpers';
+import 'cypress-file-upload';
 
 // ***********************************************
 // This example commands.js shows you how to
@@ -41,10 +42,13 @@ Cypress.Commands.add('navigateToAdmin', () => {
   cy.visit('/admin');
 });
 
-Cypress.Commands.add('login', (selector, ...args) => {
+Cypress.Commands.add('login', (username, password) => {
   cy.visit('/admin');
-  const username = Cypress.env('SPIFFWORKFLOW_FRONTEND_USERNAME') || 'ciadmin1';
-  const password = Cypress.env('SPIFFWORKFLOW_FRONTEND_PASSWORD') || 'ciadmin1';
+  console.log('username', username);
+  if (!username) {
+    username = Cypress.env('SPIFFWORKFLOW_FRONTEND_USERNAME') || 'ciadmin1';
+    password = Cypress.env('SPIFFWORKFLOW_FRONTEND_PASSWORD') || 'ciadmin1';
+  }
   cy.get('#username').type(username);
   cy.get('#password').type(password);
   if (Cypress.env('SPIFFWORKFLOW_FRONTEND_AUTH_WITH_KEYCLOAK') === true) {
@@ -94,14 +98,19 @@ Cypress.Commands.add('createModel', (groupId, modelId, modelDisplayName) => {
   cy.contains(`Process Model: ${modelDisplayName}`);
 });
 
+// Intended to be run from the process model show page
 Cypress.Commands.add(
   'runPrimaryBpmnFile',
   (expectAutoRedirectToHumanTask = false) => {
-    cy.contains('Start').click();
+    // cy.getBySel('start-process-instance').click();
+    // click on button with text Start
+    cy.get('button')
+      .contains(/^Start$/)
+      .click();
     if (expectAutoRedirectToHumanTask) {
       // the url changes immediately, so also make sure we get some content from the next page, "Task:", or else when we try to interact with the page, it'll re-render and we'll get an error with cypress.
       cy.url().should('include', `/tasks/`);
-      cy.contains('Task: ');
+      cy.contains('Task: ', { timeout: 30000 });
     } else {
       cy.contains(/Process Instance.*[kK]icked [oO]ff/);
       cy.reload(true);
@@ -146,6 +155,10 @@ Cypress.Commands.add(
       .then(($element) => {
         const oldId = $element.text().trim();
         cy.get('.cds--pagination__button--forward').click();
+        cy.contains(
+          `[data-qa=${dataQaTagToUseToEnsureTableHasLoaded}]`,
+          oldId
+        ).should('not.exist');
         cy.contains(/\b3–4 of \d+/);
         cy.get('.cds--pagination__button--backward').click();
         cy.contains(/\b1–2 of \d+/);

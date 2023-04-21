@@ -61,11 +61,14 @@ class TestGetAllPermissions(BaseTest):
                 "uri": "/tasks",
                 "permissions": ["create", "read", "update", "delete"],
             },
+            {
+                "group_identifier": "my_test_group",
+                "uri": "/process-data-file-download/hey:group:*",
+                "permissions": ["read"],
+            },
         ]
 
         permissions = GetAllPermissions().run(script_attributes_context)
         sorted_permissions = sorted(permissions, key=itemgetter("uri"))
-        sorted_expected_permissions = sorted(
-            expected_permissions, key=itemgetter("uri")
-        )
+        sorted_expected_permissions = sorted(expected_permissions, key=itemgetter("uri"))
         assert sorted_permissions == sorted_expected_permissions

@@ -28,18 +28,29 @@ export default function ProcessModelSearch({
     return '';
   };
 
-  const getFullProcessModelLabel = (processModel: ProcessModel) => {
-    return `${processModel.id} (${getParentGroupsDisplayName(processModel)} ${
-      processModel.display_name
-    })`;
+  const getProcessModelLabelForDisplay = (processModel: ProcessModel) => {
+    return `${processModel.display_name} (${processModel.id})`;
+  };
+
+  const getProcessModelLabelForSearch = (processModel: ProcessModel) => {
+    return `${processModel.display_name} ${
+      processModel.id
+    } ${getParentGroupsDisplayName(processModel)}`;
   };
 
   const shouldFilterProcessModel = (options: any) => {
     const processModel: ProcessModel = options.item;
-    const { inputValue } = options;
-    return getFullProcessModelLabel(processModel)
-      .toLowerCase()
-      .includes((inputValue || '').toLowerCase());
+    let { inputValue } = options;
+    if (!inputValue) {
+      inputValue = '';
+    }
+    const inputValueArray = inputValue.split(' ');
+    const processModelLowerCase =
+      getProcessModelLabelForSearch(processModel).toLowerCase();
+
+    return inputValueArray.every((i: any) => {
+      return processModelLowerCase.includes((i || '').toLowerCase());
+    });
   };
   return (
     <ComboBox
@@ -49,7 +60,7 @@ export default function ProcessModelSearch({
       items={processModels}
       itemToString={(processModel: ProcessModel) => {
         if (processModel) {
-          return getFullProcessModelLabel(processModel);
+          return getProcessModelLabelForDisplay(processModel);
         }
         return null;
       }}

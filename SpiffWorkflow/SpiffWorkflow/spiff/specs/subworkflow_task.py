@@ -1,7 +1,13 @@
-from SpiffWorkflow.bpmn.specs.SubWorkflowTask import SubWorkflowTask, TransactionSubprocess, CallActivity
+from SpiffWorkflow.task import TaskState
+from SpiffWorkflow.bpmn.specs.SubWorkflowTask import (
+    SubWorkflowTask as DefaultSubWorkflow,
+    TransactionSubprocess as DefaultTransaction,
+    CallActivity as DefaultCallActivity,
+)
 from SpiffWorkflow.spiff.specs.spiff_task import SpiffBpmnTask
 
-class SubWorkflowTask(SubWorkflowTask, SpiffBpmnTask):
+
+class SubWorkflowTask(DefaultSubWorkflow, SpiffBpmnTask):
 
     def __init__(self, wf_spec, name, subworkflow_spec, transaction=False, **kwargs):
 
@@ -13,9 +19,14 @@ class SubWorkflowTask(SubWorkflowTask, SpiffBpmnTask):
         self.in_assign = []
         self.out_assign = []
 
-    def _on_ready_hook(self, my_task):
-        SpiffBpmnTask._on_ready_hook(self, my_task)
-        self.start_workflow(my_task)
+    def _update_hook(self, my_task):
+        # Don't really like duplicating this, but we need to run SpiffBpmn update rather than the default
+        wf = my_task.workflow._get_outermost_workflow(my_task)
+        if my_task.id not in wf.subprocesses:
+            SpiffBpmnTask._update_hook(self, my_task)
+            self.create_workflow(my_task)
+            self.start_workflow(my_task)
+            my_task._set_state(TaskState.WAITING)
 
     def _on_complete_hook(self, my_task):
         SpiffBpmnTask._on_complete_hook(self, my_task)
@@ -25,7 +36,7 @@ class SubWorkflowTask(SubWorkflowTask, SpiffBpmnTask):
         return 'Subprocess'
 
 
-class TransactionSubprocess(SubWorkflowTask, TransactionSubprocess):
+class TransactionSubprocess(SubWorkflowTask, DefaultTransaction):
 
     def __init__(self, wf_spec, name, subworkflow_spec, transaction=True, **kwargs):
 
@@ -40,7 +51,7 @@ class TransactionSubprocess(SubWorkflowTask, TransactionSubprocess):
         return 'Transactional Subprocess'
 
 
-class CallActivity(SubWorkflowTask, CallActivity):
+class CallActivity(SubWorkflowTask, DefaultCallActivity):
 
     def __init__(self, wf_spec, name, subworkflow_spec, **kwargs):
         

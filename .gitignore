@@ -1,3 +1,8 @@
 pyrightconfig.json
 .idea/
 t
+*~
+.dccache
+*~
+version_info.json
+.coverage*

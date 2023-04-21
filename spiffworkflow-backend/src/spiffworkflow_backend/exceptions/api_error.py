@@ -128,7 +128,7 @@ class ApiError(Exception):
         instance = cls(code, message, status_code=status_code)
         instance.task_id = task_spec.name or ""
         instance.task_name = task_spec.description or ""
-        if task_spec._wf_spec:
+        if hasattr(task_spec, "_wf_spec") and task_spec._wf_spec:
             instance.file_name = task_spec._wf_spec.file
         return instance
 
@@ -149,7 +149,7 @@ class ApiError(Exception):
             # Note that WorkflowDataExceptions are also WorkflowTaskExceptions
             return ApiError.from_task(
                 error_code,
-                message,
+                message + ". " + str(exp),
                 exp.task,
                 line_number=exp.line_number,
                 offset=exp.offset,
@@ -157,8 +157,9 @@ class ApiError(Exception):
                 error_line=exp.error_line,
                 task_trace=exp.task_trace,
             )
-        elif isinstance(exp, WorkflowException):
-            return ApiError.from_task_spec(error_code, message, exp.task_spec)
+        elif isinstance(exp, WorkflowException) and exp.task_spec:
+            msg = message + ". " + str(exp)
+            return ApiError.from_task_spec(error_code, msg, exp.task_spec)
         else:
             return ApiError("workflow_error", str(exp))
 
@@ -202,20 +203,13 @@ def handle_exception(exception: Exception) -> flask.wrappers.Response:
 
         if isinstance(exception, ApiError):
             current_app.logger.info(
-                f"Sending ApiError exception to sentry: {exception} with error code"
-                f" {exception.error_code}"
+                f"Sending ApiError exception to sentry: {exception} with error code {exception.error_code}"
             )
 
-        organization_slug = current_app.config.get(
-            "SPIFFWORKFLOW_BACKEND_SENTRY_ORGANIZATION_SLUG"
-        )
-        project_slug = current_app.config.get(
-            "SPIFFWORKFLOW_BACKEND_SENTRY_PROJECT_SLUG"
-        )
+        organization_slug = current_app.config.get("SPIFFWORKFLOW_BACKEND_SENTRY_ORGANIZATION_SLUG")
+        project_slug = current_app.config.get("SPIFFWORKFLOW_BACKEND_SENTRY_PROJECT_SLUG")
         if organization_slug and project_slug:
-            sentry_link = (
-                f"https://sentry.io/{organization_slug}/{project_slug}/events/{id}"
-            )
+            sentry_link = f"https://sentry.io/{organization_slug}/{project_slug}/events/{id}"
 
         # !!!NOTE!!!: do this after sentry stuff since calling logger.exception
         # seems to break the sentry sdk context where we no longer get back
@@ -253,7 +247,7 @@ def handle_exception(exception: Exception) -> flask.wrappers.Response:
     else:
         api_exception = ApiError(
             error_code=error_code,
-            message=f"{exception.__class__.__name__}",
+            message=f"{exception.__class__.__name__} {str(exception)}",
             sentry_link=sentry_link,
             status_code=status_code,
         )

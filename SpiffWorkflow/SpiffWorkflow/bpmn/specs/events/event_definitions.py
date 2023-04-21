@@ -20,12 +20,14 @@
 import re
 from datetime import datetime, timedelta, timezone
 from calendar import monthrange
-from time import timezone as tzoffset
+from time import timezone as tzoffset, altzone as dstoffset, daylight as isdst
 from copy import deepcopy
 
+from SpiffWorkflow.exceptions import WorkflowException
 from SpiffWorkflow.task import TaskState
 
-LOCALTZ = timezone(timedelta(seconds=-1 * tzoffset))
+seconds_from_utc = dstoffset if isdst else tzoffset
+LOCALTZ = timezone(timedelta(seconds=-1 * seconds_from_utc))
 
 
 class EventDefinition(object):
@@ -72,9 +74,9 @@ class EventDefinition(object):
         # We also don't have a more sophisticated method for addressing events to
         # a particular process, but this at least provides a mechanism for distinguishing
         # between processes and subprocesses.
-        if self.external:
+        if self.external and outer_workflow != workflow:
             outer_workflow.catch(event, correlations)
-        if self.internal and (self.external and workflow != outer_workflow):
+        else:
             workflow.catch(event)
 
     def __eq__(self, other):
@@ -160,11 +162,10 @@ class EscalationEventDefinition(NamedEventDefinition):
 class CorrelationProperty:
     """Rules for generating a correlation key when a message is sent or received."""
 
-    def __init__(self, name, expression, correlation_keys):
+    def __init__(self, name, retrieval_expression, correlation_keys, expected_value=None):
         self.name = name                            # This is the property name
-        self.expression = expression                # This is how it's generated
+        self.retrieval_expression = retrieval_expression  # This is how it's generated
         self.correlation_keys = correlation_keys    # These are the keys it's used by
-
 
 class MessageEventDefinition(NamedEventDefinition):
     """The default message event."""
@@ -191,7 +192,7 @@ class MessageEventDefinition(NamedEventDefinition):
         # However, there needs to be something to apply the correlations to in the
         # standard case and this is line with the way Spiff works otherwise
         event.payload = deepcopy(my_task.data)
-        correlations = self.get_correlations(my_task.workflow.script_engine, event.payload)
+        correlations = self.get_correlations(my_task, event.payload)
         my_task.workflow.correlations.update(correlations)
         self._throw(event, my_task.workflow, my_task.workflow.outer_workflow, correlations)
 
@@ -205,14 +206,36 @@ class MessageEventDefinition(NamedEventDefinition):
         if payload is not None:
             my_task.set_data(**payload)
 
-    def get_correlations(self, script_engine, payload):
-        correlations = {}
+    def get_correlations(self, task, payload):
+        correlation_keys = {}
         for property in self.correlation_properties:
             for key in property.correlation_keys:
-                if key not in correlations:
-                    correlations[key] = {}
-                correlations[key][property.name] = script_engine._evaluate(property.expression, payload)
-        return correlations
+                if key not in correlation_keys:
+                    correlation_keys[key] = {}
+                try:
+                    correlation_keys[key][property.name] = task.workflow.script_engine._evaluate(property.retrieval_expression, payload)
+                except WorkflowException as we:
+                    we.add_note(
+                        f"Failed to evaluate correlation property '{property.name}'"
+                        f" invalid expression '{property.retrieval_expression}'")
+                    we.task_spec = task.task_spec
+                    raise we
+        return correlation_keys
+
+    def conversation(self):
+        """An event may have many correlation properties, this figures out
+        which conversation exists across all of them, or return None if they
+        do not share a topic. """
+        conversation = None
+        if len(self.correlation_properties) > 0:
+            for prop in self.correlation_properties:
+                for key in prop.correlation_keys:
+                    conversation = key
+                    for prop in self.correlation_properties:
+                        if conversation not in prop.correlation_keys:
+                            break
+                    return conversation
+        return None
 
 
 class NoneEventDefinition(EventDefinition):
@@ -351,7 +374,7 @@ class TimerEventDefinition(EventDefinition):
             return TimerEventDefinition.parse_iso_week(expression)
         else:
             return TimerEventDefinition.get_datetime(expression)
- 
+
     @staticmethod
     def parse_iso_recurring_interval(expression):
         components = expression.upper().replace('--', '/').strip('R').split('/')
@@ -430,41 +453,37 @@ class CycleTimerEventDefinition(TimerEventDefinition):
     def event_type(self):
         return 'Cycle Timer'
 
-    def has_fired(self, my_task):
+    def cycle_complete(self, my_task):
 
-        if not my_task._get_internal_data('event_fired'):
-            # Only check for the next cycle when the event has not fired to prevent cycles from being skipped.
-            event_value = my_task._get_internal_data('event_value')
-            if event_value is None:
-                expression = my_task.workflow.script_engine.evaluate(my_task, self.expression)
-                cycles, start, duration = TimerEventDefinition.parse_iso_recurring_interval(expression)
-                event_value = {'cycles': cycles, 'next': start.isoformat(), 'duration': duration.total_seconds()}
+        event_value = my_task._get_internal_data('event_value')
+        if event_value is None:
+            # Don't necessarily like this, but it's a lot more staightforward than trying to only create
+            # a child task on loop iterations after the first
+            my_task._drop_children()
+            expression = my_task.workflow.script_engine.evaluate(my_task, self.expression)
+            cycles, start, duration = TimerEventDefinition.parse_iso_recurring_interval(expression)
+            event_value = {'cycles': cycles, 'next': start.isoformat(), 'duration': duration.total_seconds()}
 
-            if event_value['cycles'] > 0:
-                next_event = datetime.fromisoformat(event_value['next'])
-                if next_event < datetime.now(timezone.utc):
-                    my_task._set_internal_data(event_fired=True)
-                    event_value['next'] = (next_event + timedelta(seconds=event_value['duration'])).isoformat()
+        # When the next timer event passes, return True to allow the parent task to generate another child
+        # Use event fired to indicate that this timer has completed all cycles and the task can be completed
+        ready = False
+        if event_value['cycles'] != 0:
+            next_event = datetime.fromisoformat(event_value['next'])
+            if next_event < datetime.now(timezone.utc):
+                event_value['next'] = (next_event + timedelta(seconds=event_value['duration'])).isoformat()
+                event_value['cycles'] -= 1
+                ready = True
+        else:
+            my_task.internal_data.pop('event_value', None)
+            my_task.internal_data['event_fired'] = True
 
-            my_task._set_internal_data(event_value=event_value)
-
-        return my_task._get_internal_data('event_fired', False)
+        my_task._set_internal_data(event_value=event_value)
+        return ready
 
     def timer_value(self, my_task):
         event_value = my_task._get_internal_data('event_value')
-        if event_value is not None and event_value['cycles'] > 0:
+        if event_value is not None and event_value['cycles'] != 0:
             return event_value['next']
-
-    def complete(self, my_task):
-        event_value = my_task._get_internal_data('event_value')
-        if event_value is not None and event_value['cycles'] == 0:
-            my_task.internal_data.pop('event_value')
-            return True
-
-    def complete_cycle(self, my_task):
-        # Only increment when the task completes
-        if my_task._get_internal_data('event_value') is not None:
-            my_task.internal_data['event_value']['cycles'] -= 1
 
 
 class MultipleEventDefinition(EventDefinition):
@@ -482,11 +501,10 @@ class MultipleEventDefinition(EventDefinition):
 
         seen_events = my_task.internal_data.get('seen_events', [])
         for event in self.event_definitions:
-            if isinstance(event, (TimerEventDefinition, CycleTimerEventDefinition)):
+            if isinstance(event, TimerEventDefinition):
                 child = [c for c in my_task.children if c.task_spec.event_definition == event]
                 child[0].task_spec._update_hook(child[0])
-                child[0]._set_state(TaskState.MAYBE)
-                if event.has_fired(my_task):
+                if event.has_fired(child[0]):
                     seen_events.append(event)
 
         if self.parallel:
@@ -510,7 +528,7 @@ class MultipleEventDefinition(EventDefinition):
             if event == other:
                 return True
         return False
-    
+
     def throw(self, my_task):
         # Mutiple events throw all associated events when they fire
         for event_definition in self.event_definitions:

@@ -13,9 +13,7 @@ from spiffworkflow_backend.services.process_instance_service import (
 
 
 class TestDotNotation(BaseTest):
-    """TestVariousBpmnConstructs."""
-
-    def test_dot_notation(
+    def test_dot_notation_in_message_path(
         self,
         app: Flask,
         client: FlaskClient,
@@ -41,9 +39,7 @@ class TestDotNotation(BaseTest):
             client, process_model_identifier, headers
         )
         process_instance_id = response.json["id"]
-        process_instance = ProcessInstanceService().get_process_instance(
-            process_instance_id
-        )
+        process_instance = ProcessInstanceService().get_process_instance(process_instance_id)
 
         processor = ProcessInstanceProcessor(process_instance)
         processor.do_engine_steps(save=True)
@@ -57,9 +53,7 @@ class TestDotNotation(BaseTest):
             "invoice.invoiceAmount": "1000.00",
             "invoice.dueDate": "09/30/2022",
         }
-        ProcessInstanceService.complete_form_task(
-            processor, user_task, form_data, with_super_admin_user, human_task
-        )
+        ProcessInstanceService.complete_form_task(processor, user_task, form_data, with_super_admin_user, human_task)
 
         expected = {
             "contibutorName": "Elizabeth",

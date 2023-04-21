@@ -60,14 +60,13 @@ import HttpService from '../services/HttpService';
 import ButtonWithConfirmation from './ButtonWithConfirmation';
 import { getBpmnProcessIdentifiers, makeid } from '../helpers';
 import { useUriListForPermissions } from '../hooks/UriListForPermissions';
-import { PermissionsToCheck, ProcessInstanceTask } from '../interfaces';
+import { PermissionsToCheck, Task } from '../interfaces';
 import { usePermissionFetcher } from '../hooks/PermissionService';
 
 type OwnProps = {
   processModelId: string;
   diagramType: string;
-  readyOrWaitingProcessInstanceTasks?: ProcessInstanceTask[] | null;
-  completedProcessInstanceTasks?: ProcessInstanceTask[] | null;
+  tasks?: Task[] | null;
   saveDiagram?: (..._args: any[]) => any;
   onDeleteFile?: (..._args: any[]) => any;
   isPrimaryFile?: boolean;
@@ -92,8 +91,7 @@ type OwnProps = {
 export default function ReactDiagramEditor({
   processModelId,
   diagramType,
-  readyOrWaitingProcessInstanceTasks,
-  completedProcessInstanceTasks,
+  tasks,
   saveDiagram,
   onDeleteFile,
   isPrimaryFile,
@@ -358,24 +356,25 @@ export default function ReactDiagramEditor({
     function checkTaskCanBeHighlighted(taskBpmnId: string) {
       return (
         !taskSpecsThatCannotBeHighlighted.includes(taskBpmnId) &&
-        !taskBpmnId.match(/EndJoin/)
+        !taskBpmnId.match(/EndJoin/) &&
+        !taskBpmnId.match(/BoundaryEventParent/)
       );
     }
 
     function highlightBpmnIoElement(
       canvas: any,
-      processInstanceTask: ProcessInstanceTask,
+      task: Task,
       bpmnIoClassName: string,
       bpmnProcessIdentifiers: string[]
     ) {
-      if (checkTaskCanBeHighlighted(processInstanceTask.name)) {
+      if (checkTaskCanBeHighlighted(task.bpmn_identifier)) {
         try {
           if (
             bpmnProcessIdentifiers.includes(
-              processInstanceTask.process_identifier
+              task.bpmn_process_definition_identifier
             )
           ) {
-            canvas.addMarker(processInstanceTask.name, bpmnIoClassName);
+            canvas.addMarker(task.bpmn_identifier, bpmnIoClassName);
           }
         } catch (bpmnIoError: any) {
           // the task list also contains task for processes called from call activities which will
@@ -415,30 +414,29 @@ export default function ReactDiagramEditor({
       // highlighting a field
       // Option 3 at:
       //  https://github.com/bpmn-io/bpmn-js-examples/tree/master/colors
-      if (readyOrWaitingProcessInstanceTasks) {
+      if (tasks) {
         const bpmnProcessIdentifiers = getBpmnProcessIdentifiers(
           canvas.getRootElement()
         );
-        readyOrWaitingProcessInstanceTasks.forEach((readyOrWaitingBpmnTask) => {
-          highlightBpmnIoElement(
-            canvas,
-            readyOrWaitingBpmnTask,
-            'active-task-highlight',
-            bpmnProcessIdentifiers
-          );
-        });
-      }
-      if (completedProcessInstanceTasks) {
-        const bpmnProcessIdentifiers = getBpmnProcessIdentifiers(
-          canvas.getRootElement()
-        );
-        completedProcessInstanceTasks.forEach((completedTask) => {
-          highlightBpmnIoElement(
-            canvas,
-            completedTask,
-            'completed-task-highlight',
-            bpmnProcessIdentifiers
-          );
+        tasks.forEach((task: Task) => {
+          let className = '';
+          if (task.state === 'COMPLETED') {
+            className = 'completed-task-highlight';
+          } else if (task.state === 'READY' || task.state === 'WAITING') {
+            className = 'active-task-highlight';
+          } else if (task.state === 'CANCELLED') {
+            className = 'cancelled-task-highlight';
+          } else if (task.state === 'ERROR') {
+            className = 'errored-task-highlight';
+          }
+          if (className) {
+            highlightBpmnIoElement(
+              canvas,
+              task,
+              className,
+              bpmnProcessIdentifiers
+            );
+          }
         });
       }
     }
@@ -450,7 +448,12 @@ export default function ReactDiagramEditor({
       if (alreadyImportedXmlRef.current) {
         return;
       }
-      diagramModelerToUse.importXML(diagramXMLToDisplay);
+      diagramModelerToUse.importXML(diagramXMLToDisplay).then(() => {
+        if (diagramType === 'bpmn' || diagramType === 'readonly') {
+          diagramModelerToUse.get('canvas').zoom('fit-viewport');
+        }
+      });
+
       alreadyImportedXmlRef.current = true;
     }
 
@@ -513,9 +516,8 @@ export default function ReactDiagramEditor({
     diagramType,
     diagramXML,
     diagramXMLString,
-    readyOrWaitingProcessInstanceTasks,
-    completedProcessInstanceTasks,
     fileName,
+    tasks,
     performingXmlUpdates,
     processModelId,
     url,

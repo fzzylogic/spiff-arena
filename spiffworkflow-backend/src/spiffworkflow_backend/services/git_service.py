@@ -1,5 +1,6 @@
 """Git_service."""
 import os
+import re
 import shutil
 import subprocess  # noqa we need the subprocess module to safely run the git commands
 import uuid
@@ -37,14 +38,10 @@ class GitService:
     @classmethod
     def get_current_revision(cls) -> str:
         """Get_current_revision."""
-        bpmn_spec_absolute_dir = current_app.config[
-            "SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"
-        ]
+        bpmn_spec_absolute_dir = current_app.config["SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"]
         # The value includes a carriage return character at the end, so we don't grab the last character
         with FileSystemService.cd(bpmn_spec_absolute_dir):
-            return cls.run_shell_command_to_get_stdout(
-                ["git", "rev-parse", "--short", "HEAD"]
-            )
+            return cls.run_shell_command_to_get_stdout(["git", "rev-parse", "--short", "HEAD"])
 
     @classmethod
     def get_instance_file_contents_for_revision(
@@ -54,12 +51,8 @@ class GitService:
         file_name: Optional[str] = None,
     ) -> str:
         """Get_instance_file_contents_for_revision."""
-        bpmn_spec_absolute_dir = current_app.config[
-            "SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"
-        ]
-        process_model_relative_path = FileSystemService.process_model_relative_path(
-            process_model
-        )
+        bpmn_spec_absolute_dir = current_app.config["SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"]
+        process_model_relative_path = FileSystemService.process_model_relative_path(process_model)
         file_name_to_use = file_name
         if file_name_to_use is None:
             file_name_to_use = process_model.primary_file_name
@@ -82,42 +75,19 @@ class GitService:
         cls.check_for_basic_configs()
         branch_name_to_use = branch_name
         if branch_name_to_use is None:
-            branch_name_to_use = current_app.config[
-                "SPIFFWORKFLOW_BACKEND_GIT_SOURCE_BRANCH"
-            ]
+            branch_name_to_use = current_app.config["SPIFFWORKFLOW_BACKEND_GIT_SOURCE_BRANCH"]
         repo_path_to_use = repo_path
         if repo_path is None:
-            repo_path_to_use = current_app.config[
-                "SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"
-            ]
+            repo_path_to_use = current_app.config["SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"]
         if repo_path_to_use is None:
-            raise ConfigurationError(
-                "SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR config must be set"
-            )
-        if current_app.config["SPIFFWORKFLOW_BACKEND_GIT_SSH_PRIVATE_KEY"]:
-            os.environ["SPIFFWORKFLOW_BACKEND_GIT_SSH_PRIVATE_KEY"] = (
-                current_app.config["SPIFFWORKFLOW_BACKEND_GIT_SSH_PRIVATE_KEY"]
-            )
+            raise ConfigurationError("SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR config must be set")
 
-        git_username = ""
-        git_email = ""
-        if (
-            current_app.config["SPIFFWORKFLOW_BACKEND_GIT_USERNAME"]
-            and current_app.config["SPIFFWORKFLOW_BACKEND_GIT_USER_EMAIL"]
-        ):
-            git_username = current_app.config["SPIFFWORKFLOW_BACKEND_GIT_USERNAME"]
-            git_email = current_app.config["SPIFFWORKFLOW_BACKEND_GIT_USER_EMAIL"]
-        shell_command_path = os.path.join(
-            current_app.root_path, "..", "..", "bin", "git_commit_bpmn_models_repo"
-        )
+        shell_command_path = os.path.join(current_app.root_path, "..", "..", "bin", "git_commit_bpmn_models_repo")
         shell_command = [
             shell_command_path,
             repo_path_to_use,
             message,
             branch_name_to_use,
-            git_username,
-            git_email,
-            current_app.config["SPIFFWORKFLOW_BACKEND_GIT_USER_PASSWORD"],
         ]
         return cls.run_shell_command_to_get_stdout(shell_command)
 
@@ -134,10 +104,7 @@ class GitService:
     def check_for_publish_configs(cls) -> None:
         """Check_for_configs."""
         cls.check_for_basic_configs()
-        if (
-            current_app.config["SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_TARGET_BRANCH"]
-            is None
-        ):
+        if current_app.config["SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_TARGET_BRANCH"] is None:
             raise MissingGitConfigsError(
                 "Missing config for SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_TARGET_BRANCH. "
                 "This is required for publishing process models"
@@ -169,19 +136,30 @@ class GitService:
         cls, command: list[str], return_success_state: bool = False
     ) -> Union[subprocess.CompletedProcess[bytes], bool]:
         """Run_shell_command."""
+        my_env = os.environ.copy()
+        my_env["GIT_COMMITTER_NAME"] = current_app.config.get("SPIFFWORKFLOW_BACKEND_GIT_USERNAME") or "unknown"
+
+        my_env["GIT_COMMITTER_EMAIL"] = (
+            current_app.config.get("SPIFFWORKFLOW_BACKEND_GIT_USER_EMAIL") or "unknown@example.org"
+        )
+
+        # SSH authentication can be also provided via gitconfig.
+        ssh_key_path = current_app.config.get("SPIFFWORKFLOW_BACKEND_GIT_SSH_PRIVATE_KEY_PATH")
+        if ssh_key_path is not None:
+            my_env["GIT_SSH_COMMAND"] = (
+                "ssh -F /dev/null -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i %s" % ssh_key_path
+            )
+
         # this is fine since we pass the commands directly
-        result = subprocess.run(command, check=False, capture_output=True)  # noqa
+        result = subprocess.run(command, check=False, capture_output=True, env=my_env)  # noqa
+
         if return_success_state:
             return result.returncode == 0
 
         if result.returncode != 0:
             stdout = result.stdout.decode("utf-8")
             stderr = result.stderr.decode("utf-8")
-            raise GitCommandError(
-                f"Failed to execute git command: {command} "
-                f"Stdout: {stdout} "
-                f"Stderr: {stderr} "
-            )
+            raise GitCommandError(f"Failed to execute git command: {command}Stdout: {stdout}Stderr: {stderr}")
 
         return result
 
@@ -193,24 +171,24 @@ class GitService:
 
         if "repository" not in webhook or "clone_url" not in webhook["repository"]:
             raise InvalidGitWebhookBodyError(
-                "Cannot find required keys of 'repository:clone_url' from webhook"
-                f" body: {webhook}"
+                f"Cannot find required keys of 'repository:clone_url' from webhook body: {webhook}"
             )
 
-        clone_url = webhook["repository"]["clone_url"]
-        if (
-            clone_url
-            != current_app.config["SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_CLONE_URL"]
-        ):
+        config_clone_url = current_app.config["SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_CLONE_URL"]
+        repo = webhook["repository"]
+        valid_clone_urls = [repo["clone_url"], repo["git_url"], repo["ssh_url"]]
+        if config_clone_url not in valid_clone_urls:
             raise GitCloneUrlMismatchError(
-                "Configured clone url does not match clone url from webhook:"
-                f" {clone_url}"
+                "Configured clone url does not match the repo URLs from webhook: %s =/= %s"
+                % (config_clone_url, valid_clone_urls)
             )
+
+        # Test webhook requests have a zen koan and hook info.
+        if "zen" in webhook or "hook_id" in webhook:
+            return False
 
         if "ref" not in webhook:
-            raise InvalidGitWebhookBodyError(
-                f"Could not find the 'ref' arg in the webhook boy: {webhook}"
-            )
+            raise InvalidGitWebhookBodyError(f"Could not find the 'ref' arg in the webhook boy: {webhook}")
 
         if current_app.config["SPIFFWORKFLOW_BACKEND_GIT_SOURCE_BRANCH"] is None:
             raise MissingGitConfigsError(
@@ -223,10 +201,8 @@ class GitService:
         if ref != f"refs/heads/{git_branch}":
             return False
 
-        with FileSystemService.cd(
-            current_app.config["SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"]
-        ):
-            cls.run_shell_command(["git", "pull"])
+        with FileSystemService.cd(current_app.config["SPIFFWORKFLOW_BACKEND_BPMN_SPEC_ABSOLUTE_DIR"]):
+            cls.run_shell_command(["git", "pull", "--rebase"])
         return True
 
     @classmethod
@@ -234,9 +210,7 @@ class GitService:
         """Publish."""
         cls.check_for_publish_configs()
         source_process_model_root = FileSystemService.root_path()
-        source_process_model_path = os.path.join(
-            source_process_model_root, process_model_id
-        )
+        source_process_model_path = os.path.join(source_process_model_root, process_model_id)
         unique_hex = uuid.uuid4().hex
         clone_dir = f"sample-process-models.{unique_hex}"
 
@@ -244,14 +218,7 @@ class GitService:
         # we are adding a guid to this so the flake8 issue has been mitigated
         destination_process_root = f"/tmp/{clone_dir}"  # noqa
 
-        git_clone_url = current_app.config[
-            "SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_CLONE_URL"
-        ]
-        if git_clone_url.startswith("https://"):
-            git_clone_url = git_clone_url.replace(
-                "https://",
-                f"https://{current_app.config['SPIFFWORKFLOW_BACKEND_GIT_USERNAME']}:{current_app.config['SPIFFWORKFLOW_BACKEND_GIT_USER_PASSWORD']}@",
-            )
+        git_clone_url = current_app.config["SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_CLONE_URL"]
         cmd = ["git", "clone", git_clone_url, destination_process_root]
 
         cls.run_shell_command(cmd)
@@ -273,9 +240,7 @@ class GitService:
                 cls.run_shell_command(["git", "checkout", "-b", branch_to_pull_request])
 
             # copy files from process model into the new publish branch
-            destination_process_model_path = os.path.join(
-                destination_process_root, process_model_id
-            )
+            destination_process_model_path = os.path.join(destination_process_root, process_model_id)
             if os.path.exists(destination_process_model_path):
                 shutil.rmtree(destination_process_model_path)
             shutil.copytree(source_process_model_path, destination_process_model_path)
@@ -288,9 +253,9 @@ class GitService:
             cls.commit(commit_message, destination_process_root, branch_to_pull_request)
 
             # build url for github page to open PR
-            git_remote = cls.run_shell_command_to_get_stdout(
-                ["git", "config", "--get", "remote.origin.url"]
-            )
+            git_remote = cls.run_shell_command_to_get_stdout(["git", "config", "--get", "remote.origin.url"])
+            git_remote = re.sub(pattern=r"^git@([^:]+):", repl="https://\\1/", string=git_remote)
+
             remote_url = git_remote.strip().replace(".git", "")
             pr_url = f"{remote_url}/compare/{branch_to_update}...{branch_to_pull_request}?expand=1"
 
