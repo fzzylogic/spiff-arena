@@ -30,8 +30,10 @@ class RefreshTokenStorageError(Exception):
 class UserNotLoggedInError(Exception):
     pass
 
-class UnknownOpenIdEndpoint(Exception):
+
+class UnknownOpenIdEndpointError(Exception):
     pass
+
 
 # These could be either 'id' OR 'access' tokens and we can't always know which
 
@@ -83,7 +85,7 @@ class AuthenticationService:
             response = requests.get(openid_config_url)
             AuthenticationService.ENDPOINT_CACHE = response.json()
         if name not in AuthenticationService.ENDPOINT_CACHE:
-            raise UnknownOpenIdEndpoint(f"Unknown OpenID Endpoint: {name}. Tried to get from {openid_config_url}")
+            raise UnknownOpenIdEndpointError(f"Unknown OpenID Endpoint: {name}. Tried to get from {openid_config_url}")
         return AuthenticationService.ENDPOINT_CACHE.get(name, "")
 
     @staticmethod
@@ -97,12 +99,12 @@ class AuthenticationService:
             redirect_url = f"{self.get_backend_url()}/v1.0/logout_return"
         try:
             request_url = (
-                    self.open_id_endpoint_for_name("end_session_endpoint")
-                    + f"?post_logout_redirect_uri={redirect_url}&"
-                    + f"id_token_hint={id_token}"
+                self.open_id_endpoint_for_name("end_session_endpoint")
+                + f"?post_logout_redirect_uri={redirect_url}&"
+                + f"id_token_hint={id_token}"
             )
             return redirect(request_url)
-        except UnknownOpenIdEndpoint:
+        except UnknownOpenIdEndpointError:
             # We're just going to forget the token, and direct back to the login page.
             frontend_url = str(current_app.config["SPIFFWORKFLOW_BACKEND_URL_FOR_FRONTEND"])
             return redirect(f"{frontend_url}/auth/login")
