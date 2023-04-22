@@ -14,11 +14,21 @@ import { AbilityContext } from './contexts/Can';
 import UserService from './services/UserService';
 import ErrorDisplay from './components/ErrorDisplay';
 import APIErrorProvider from './contexts/APIErrorContext';
+import Login from './routes/Login';
 
 export default function App() {
   if (!UserService.isLoggedIn()) {
-    UserService.doLogin();
-    return null;
+    // This is the wrong thing to do, but need to talk to client.
+    // We can not indiscriminately redirect to the SSO as there may be
+    // more than one option (facebook, google, etc.) or the user may
+    // want to log out of this app, but not out of their SSO account.
+
+    if (document.location.pathname !== '/auth/login') {
+      UserService.doLogin();
+      return null;
+    }
+    // If the user logs out of /our app/ then show them a login page
+    return Login();
   }
 
   const ability = defineAbility(() => {});

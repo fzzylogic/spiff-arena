@@ -459,6 +459,9 @@ class AuthorizationService:
             user_attributes["display_name"] = user_info["nickname"]
         elif "name" in user_info:
             user_attributes["display_name"] = user_info["name"]
+        elif "username" in user_info:
+            user_attributes["display_name"] = user_info["username"]
+
 
         user_attributes["service"] = user_info["iss"]
         user_attributes["service_id"] = user_info["sub"]

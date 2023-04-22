@@ -65,8 +65,14 @@ const getUserEmail = () => {
 const getPreferredUsername = () => {
   const idToken = getIdToken();
   if (idToken) {
-    const idObject = jwt(idToken);
-    return (idObject as any).preferred_username;
+    const idObject: any = jwt(idToken);
+    if ('preferred_username' in idObject) {
+      return idObject.preferred_username;
+    }
+    if ('name' in idObject) {
+      return idObject.name;
+    }
+    return null;
   }
   return null;
 };
