@@ -365,7 +365,12 @@ export default function ProcessInstanceLogList({ variant }: OwnProps) {
     if (!inputValue) {
       inputValue = '';
     }
-    return stringItem.toLowerCase().includes(inputValue.toLowerCase());
+    const inputValueArray = inputValue.split(' ');
+    const stringItemLowerCase = stringItem.toLowerCase();
+
+    return inputValueArray.every((i: any) => {
+      return stringItemLowerCase.includes((i || '').toLowerCase());
+    });
   };
 
   const filterOptions = () => {

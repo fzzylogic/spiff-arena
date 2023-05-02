@@ -560,6 +560,7 @@ def process_instance_task_list(
         task_model_query = task_model_query.filter(bpmn_process_alias.id.in_(bpmn_process_ids))
 
     task_models = task_model_query.all()
+    # import pdb; pdb.set_trace()
     if most_recent_tasks_only:
         most_recent_tasks = {}
 
@@ -569,6 +570,8 @@ def process_instance_task_list(
 
         bpmn_process_cache: dict[str, list[str]] = {}
         for task_model in task_models:
+            # if task_model.guid == 'e67aeaa3-20a8-4cdd-8905-b3d7399e19b7':
+            #     import pdb; pdb.set_trace()
             if task_model.bpmn_process_guid not in bpmn_process_cache:
                 bpmn_process = BpmnProcessModel.query.filter_by(guid=task_model.bpmn_process_guid).first()
                 full_bpmn_process_path = TaskService.full_bpmn_process_path(bpmn_process)
@@ -577,15 +580,21 @@ def process_instance_task_list(
                 full_bpmn_process_path = bpmn_process_cache[task_model.bpmn_process_guid]
 
             row_key = f"{':::'.join(full_bpmn_process_path)}:::{task_model.bpmn_identifier}"
+            if row_key == 'top_level_process:::top_level_subprocess':
+                import pdb; pdb.set_trace()
+            # if task_model.guid == 'e67aeaa3-20a8-4cdd-8905-b3d7399e19b7':
+            #     import pdb; pdb.set_trace()
             if row_key not in most_recent_tasks:
                 most_recent_tasks[row_key] = task_model
                 if task_model.typename in ["SubWorkflowTask", "CallActivity"]:
                     relevant_subprocess_guids.add(task_model.guid)
+        import pdb; pdb.set_trace()
         task_models = [
             task_model
             for task_model in most_recent_tasks.values()
             if task_model.bpmn_process_guid in relevant_subprocess_guids
         ]
+    # import pdb; pdb.set_trace()
 
     if to_task_model is not None:
         task_models_dict = json.loads(current_app.json.dumps(task_models))

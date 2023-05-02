@@ -321,6 +321,7 @@ class TestProcessInstanceProcessor(BaseTest):
         with_db_and_bpmn_file_cleanup: None,
         with_super_admin_user: UserModel,
     ) -> None:
+        # TODO: add test to ensure unused bpmn processes are removed - causes issues with getting most recent tasks in task-info call
         self.create_process_group_with_api(client, with_super_admin_user, "test_group", "test_group")
         initiator_user = self.find_or_create_user("initiator_user")
         finance_user_three = self.find_or_create_user("testuser3")

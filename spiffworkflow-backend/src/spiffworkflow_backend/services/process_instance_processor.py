@@ -1190,7 +1190,7 @@ class ProcessInstanceProcessor:
                 task_model.end_in_seconds = end_in_seconds
 
             task_service.task_models[task_model.guid] = task_model
-            task_service.save_objects_to_database()
+        task_service.save_objects_to_database()
 
         ProcessInstanceTmpService.add_event_to_process_instance(
             self.process_instance_model, event_type, task_guid=task_id
