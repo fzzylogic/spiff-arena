@@ -9,13 +9,15 @@ type OwnProps = {
   processModels: ProcessModel[];
   selectedItem?: ProcessModel | null;
   titleText?: string;
+  truncateProcessModelDisplayName?: boolean;
 };
 
 export default function ProcessModelSearch({
   processModels,
   selectedItem,
   onChange,
-  titleText = 'Process model',
+  titleText = 'Process',
+  truncateProcessModelDisplayName = false,
 }: OwnProps) {
   const getParentGroupsDisplayName = (processModel: ProcessModel) => {
     if (processModel.parent_groups) {
@@ -29,7 +31,16 @@ export default function ProcessModelSearch({
   };
 
   const getProcessModelLabelForDisplay = (processModel: ProcessModel) => {
-    return `${processModel.display_name} (${processModel.id})`;
+    let processModelId = processModel.id;
+    if (truncateProcessModelDisplayName) {
+      let processModelIdArray = processModelId.split('/');
+      if (processModelIdArray.length > 2) {
+        processModelIdArray = processModelIdArray.slice(-2);
+        processModelIdArray.unshift('...');
+      }
+      processModelId = processModelIdArray.join('/');
+    }
+    return `${processModel.display_name} - ${processModelId}`;
   };
 
   const getProcessModelLabelForSearch = (processModel: ProcessModel) => {

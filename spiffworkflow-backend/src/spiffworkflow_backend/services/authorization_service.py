@@ -17,7 +17,6 @@ from flask import current_app
 from flask import g
 from flask import request
 from flask import scaffold
-from SpiffWorkflow.task import Task as SpiffTask  # type: ignore
 from sqlalchemy import or_
 from sqlalchemy import text
 
@@ -66,10 +65,17 @@ class PermissionToAssign:
     target_uri: str
 
 
+# you can explicitly call out the CRUD actions you want to permit. These include: ["create", "read", "update", "delete"]
+# if you hate typing, you can instead specify "all". If you do this, you might think it would grant access to
+# ["create", "read", "update", "delete"] for everything. instead, we do this cute thing where we, as the API authors,
+# understand that not all verbs are relevant for all API paths. For example, you cannot create logs over the API at this juncture,
+# so for /logs, only "read" is relevant. When you ask for /logs, "all", we give you read.
 # the relevant permissions are the only API methods that are currently available for each path prefix.
 # if we add further API methods, we'll need to evaluate whether they should be added here.
 PATH_SEGMENTS_FOR_PERMISSION_ALL = [
+    {"path": "/event-error-details", "relevant_permissions": ["read"]},
     {"path": "/logs", "relevant_permissions": ["read"]},
+    {"path": "/logs/typeahead-filter-values", "relevant_permissions": ["read"]},
     {
         "path": "/process-instances",
         "relevant_permissions": ["create", "read", "delete"],
@@ -191,7 +197,7 @@ class AuthorizationService:
             )
 
         permission_configs = None
-        with open(current_app.config["PERMISSIONS_FILE_FULLPATH"]) as file:
+        with open(current_app.config["SPIFFWORKFLOW_BACKEND_PERMISSIONS_FILE_ABSOLUTE_PATH"]) as file:
             permission_configs = yaml.safe_load(file)
 
         default_group = None
@@ -304,6 +310,7 @@ class AuthorizationService:
         swagger_functions = ["get_json_spec"]
         authentication_exclusion_list = [
             "status",
+            "test_raise_error",
             "authentication_callback",
             "github_webhook_receive",
         ]
@@ -412,27 +419,26 @@ class AuthorizationService:
             ) from exception
 
     @staticmethod
-    def assert_user_can_complete_spiff_task(
+    def assert_user_can_complete_task(
         process_instance_id: int,
-        spiff_task: SpiffTask,
+        task_bpmn_identifier: str,
         user: UserModel,
     ) -> bool:
-        """Assert_user_can_complete_spiff_task."""
         human_task = HumanTaskModel.query.filter_by(
-            task_name=spiff_task.task_spec.name,
+            task_name=task_bpmn_identifier,
             process_instance_id=process_instance_id,
             completed=False,
         ).first()
         if human_task is None:
             raise HumanTaskNotFoundError(
-                f"Could find an human task with task name '{spiff_task.task_spec.name}'"
+                f"Could find an human task with task name '{task_bpmn_identifier}'"
                 f" for process instance '{process_instance_id}'"
             )
 
         if user not in human_task.potential_owners:
             raise UserDoesNotHaveAccessToTaskError(
                 f"User {user.username} does not have access to update"
-                f" task'{spiff_task.task_spec.name}' for process instance"
+                f" task'{task_bpmn_identifier}' for process instance"
                 f" '{process_instance_id}'"
             )
         return True
@@ -528,8 +534,10 @@ class AuthorizationService:
         #   1. view your own instances.
         #   2. view the logs for these instances.
         if permission_set == "start":
-            target_uri = f"/process-instances/{process_related_path_segment}"
-            permissions_to_assign.append(PermissionToAssign(permission="create", target_uri=target_uri))
+            path_prefixes_that_allow_create_access = ["process-instances"]
+            for path_prefix in path_prefixes_that_allow_create_access:
+                target_uri = f"/{path_prefix}/{process_related_path_segment}"
+                permissions_to_assign.append(PermissionToAssign(permission="create", target_uri=target_uri))
 
             # giving people access to all logs for an instance actually gives them a little bit more access
             # than would be optimal. ideally, you would only be able to view the logs for instances that you started
@@ -544,7 +552,9 @@ class AuthorizationService:
             for target_uri in [
                 f"/process-instances/for-me/{process_related_path_segment}",
                 f"/logs/{process_related_path_segment}",
+                f"/logs/typeahead-filter-values/{process_related_path_segment}",
                 f"/process-data-file-download/{process_related_path_segment}",
+                f"/event-error-details/{process_related_path_segment}",
             ]:
                 permissions_to_assign.append(PermissionToAssign(permission="read", target_uri=target_uri))
         else:
@@ -565,11 +575,15 @@ class AuthorizationService:
     def set_basic_permissions(cls) -> list[PermissionToAssign]:
         """Set_basic_permissions."""
         permissions_to_assign: list[PermissionToAssign] = []
-        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/process-instances/for-me"))
+        permissions_to_assign.append(PermissionToAssign(permission="create", target_uri="/process-instances/for-me"))
+        permissions_to_assign.append(
+            PermissionToAssign(permission="read", target_uri="/process-instances/report-metadata")
+        )
         permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/processes"))
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/processes/callers"))
         permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/service-tasks"))
         permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/user-groups/for-current-user"))
-        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/logs/types"))
+        permissions_to_assign.append(PermissionToAssign(permission="read", target_uri="/active-users/*"))
         permissions_to_assign.append(PermissionToAssign(permission="create", target_uri="/users/exists/by-username"))
         permissions_to_assign.append(
             PermissionToAssign(permission="read", target_uri="/process-instances/find-by-id/*")

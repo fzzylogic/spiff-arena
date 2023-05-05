@@ -37,10 +37,16 @@ export interface EventDefinition {
   message_var?: string;
 }
 
+export interface SignalButton {
+  label: string;
+  event: EventDefinition;
+}
+
 // TODO: merge with ProcessInstanceTask
 export interface Task {
   id: number;
   guid: string;
+  process_instance_id: number;
   bpmn_identifier: string;
   bpmn_name?: string;
   bpmn_process_direct_parent_guid: string;
@@ -52,6 +58,14 @@ export interface Task {
   task_definition_properties_json: TaskDefinitionPropertiesJson;
 
   event_definition?: EventDefinition;
+
+  process_model_display_name: string;
+  process_model_identifier: string;
+  name_for_display: string;
+  can_complete: boolean;
+  form_schema: any;
+  form_ui_schema: any;
+  signal_buttons: SignalButton[];
 }
 
 export interface ProcessInstanceTask {
@@ -81,6 +95,7 @@ export interface ProcessInstanceTask {
 
   potential_owner_usernames?: string;
   assigned_user_group_identifier?: string;
+  error_message?: string;
 }
 
 export interface ProcessReference {
@@ -105,6 +120,7 @@ export interface ProcessFile {
   size: number;
   type: string;
   file_contents?: string;
+  file_contents_hash?: string;
 }
 
 export interface ProcessInstanceMetadata {
@@ -128,6 +144,12 @@ export interface ProcessInstance {
   bpmn_version_control_type: string;
   process_metadata?: ProcessInstanceMetadata[];
   process_model_with_diagram_identifier?: string;
+
+  // from tasks
+  potential_owner_usernames?: string;
+  task_id?: string;
+  task_updated_at_in_seconds?: number;
+  waiting_for?: string;
 }
 
 export interface MessageCorrelationProperties {
@@ -154,7 +176,8 @@ export interface MessageInstance {
 
 export interface ReportFilter {
   field_name: string;
-  field_value: string;
+  // using any here so we can use this as a string and boolean
+  field_value: any;
   operator?: string;
 }
 
@@ -197,6 +220,7 @@ export interface ProcessModel {
   description: string;
   display_name: string;
   primary_file_name: string;
+  primary_process_id: string;
   files: ProcessFile[];
   parent_groups?: ProcessGroupLite[];
   metadata_extraction_paths?: MetadataExtractionPath[];
@@ -320,3 +344,10 @@ export interface ProcessInstanceLogEntry {
   user_id?: number;
   username?: string;
 }
+
+export interface ProcessModelCaller {
+  display_name: string;
+  process_model_id: string;
+}
+
+export interface UserGroup {}

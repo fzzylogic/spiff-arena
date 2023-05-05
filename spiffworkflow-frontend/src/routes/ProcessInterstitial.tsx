@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 // @ts-ignore
-import { Loading, Grid, Column } from '@carbon/react';
+import { Loading, Grid, Column, Button } from '@carbon/react';
 import { BACKEND_BASE_URL } from '../config';
 import { getBasicHeaders } from '../services/HttpService';
 
@@ -10,6 +10,7 @@ import { getBasicHeaders } from '../services/HttpService';
 import InstructionsForEndUser from '../components/InstructionsForEndUser';
 import ProcessBreadcrumb from '../components/ProcessBreadcrumb';
 import { ProcessInstanceTask } from '../interfaces';
+import useAPIError from '../hooks/UseApiError';
 
 export default function ProcessInterstitial() {
   const [data, setData] = useState<any[]>([]);
@@ -20,6 +21,9 @@ export default function ProcessInterstitial() {
   const userTasks = useMemo(() => {
     return ['User Task', 'Manual Task'];
   }, []);
+  const { addError } = useAPIError();
+
+  const processInstanceShowPageBaseUrl = `/admin/process-instances/for-me/${params.modified_process_model_identifier}`;
 
   useEffect(() => {
     fetchEventSource(
@@ -27,9 +31,13 @@ export default function ProcessInterstitial() {
       {
         headers: getBasicHeaders(),
         onmessage(ev) {
-          const task = JSON.parse(ev.data);
-          setData((prevData) => [...prevData, task]);
-          setLastTask(task);
+          const retValue = JSON.parse(ev.data);
+          if ('error_code' in retValue) {
+            addError(retValue);
+          } else {
+            setData((prevData) => [retValue, ...prevData]);
+            setLastTask(retValue);
+          }
         },
         onclose() {
           setState('CLOSED');
@@ -50,7 +58,6 @@ export default function ProcessInterstitial() {
     // Added this seperate use effect so that the timer interval will be cleared if
     // we end up redirecting back to the TaskShow page.
     if (shouldRedirect(lastTask)) {
-      setState('REDIRECTING');
       lastTask.properties.instructionsForEndUser = '';
       const timerId = setInterval(() => {
         navigate(`/tasks/${lastTask.process_instance_id}/${lastTask.id}`);
@@ -85,9 +92,39 @@ export default function ProcessInterstitial() {
         return <img src="/interstitial/waiting.png" alt="Waiting ...." />;
       case 'COMPLETED':
         return <img src="/interstitial/completed.png" alt="Completed" />;
+      case 'ERROR':
+        return <img src="/interstitial/errored.png" alt="Errored" />;
       default:
         return getStatus();
     }
+  };
+
+  const getReturnHomeButton = (index: number) => {
+    if (
+      index === 0 &&
+      !shouldRedirect(lastTask) &&
+      ['WAITING', 'ERROR', 'LOCKED', 'COMPLETED', 'READY'].includes(getStatus())
+    ) {
+      return (
+        <div style={{ padding: '10px 0 0 0' }}>
+          <Button kind="secondary" onClick={() => navigate(`/tasks`)}>
+            Return to Home
+          </Button>
+        </div>
+      );
+    }
+    return '';
+  };
+
+  const getHr = (index: number) => {
+    if (index === 0) {
+      return (
+        <div style={{ padding: '10px 0 50px 0' }}>
+          <hr />
+        </div>
+      );
+    }
+    return '';
   };
 
   function capitalize(str: string): string {
@@ -99,21 +136,36 @@ export default function ProcessInterstitial() {
 
   const userMessage = (myTask: ProcessInstanceTask) => {
     if (!myTask.can_complete && userTasks.includes(myTask.type)) {
-      return <div>This next task must be completed by a different person.</div>;
+      return (
+        <>
+          <h4 className="heading-compact-01">Waiting on Someone Else</h4>
+          <p>
+            This next task is assigned to a different person or team. There is
+            no action for you to take at this time.
+          </p>
+        </>
+      );
     }
     if (shouldRedirect(myTask)) {
       return <div>Redirecting you to the next task now ...</div>;
     }
+    if (myTask.error_message) {
+      return <div>{myTask.error_message}</div>;
+    }
+
     return (
       <div>
-        <InstructionsForEndUser task={myTask} />
+        <InstructionsForEndUser
+          task={myTask}
+          defaultMessage="There are no additional instructions or information for this task."
+        />
       </div>
     );
   };
 
   /** In the event there is no task information and the connection closed,
    * redirect to the home page. */
-  if (state === 'closed' && lastTask === null) {
+  if (state === 'CLOSED' && lastTask === null) {
     navigate(`/tasks`);
   }
   if (lastTask) {
@@ -127,10 +179,13 @@ export default function ProcessInterstitial() {
               entityType: 'process-model-id',
               linkLastItem: true,
             },
-            [`Process Instance Id: ${lastTask.process_instance_id}`],
+            [
+              `Process Instance: ${params.process_instance_id}`,
+              `${processInstanceShowPageBaseUrl}/${params.process_instance_id}`,
+            ],
           ]}
         />
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {getStatusImage()}
           <div>
             <h1 style={{ marginBottom: '0em' }}>
@@ -142,13 +197,20 @@ export default function ProcessInterstitial() {
         </div>
         <br />
         <br />
-        {data.map((d) => (
+        {data.map((d, index) => (
           <Grid fullWidth style={{ marginBottom: '1em' }}>
-            <Column md={2} lg={4} sm={2}>
-              Task: <em>{d.title}</em>
-            </Column>
             <Column md={6} lg={8} sm={4}>
-              {userMessage(d)}
+              <div
+                className={
+                  index < 4
+                    ? `user_instructions_${index}`
+                    : `user_instructions_4`
+                }
+              >
+                {userMessage(d)}
+              </div>
+              {getReturnHomeButton(index)}
+              {getHr(index)}
             </Column>
           </Grid>
         ))}

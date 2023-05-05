@@ -29,6 +29,10 @@
   border-color: none;
 }
 
+.cds--loading__stroke {
+  stroke: gray;
+}
+
 /* make this a little less prominent so the actual human beings completing tasks stand out */
 .system-user-log-entry {
   color: #B0B0B0;
@@ -101,10 +105,12 @@ h2 {
 }
 .cds--btn--ghost.button-link:hover {
   color: #0062fe;
+  background-color: white;
   padding-left: 0;
 }
 .cds--btn--ghost.button-link:visited:hover {
   color: #0062fe;
+  background-color: white;
   padding-left: 0;
 }
 
@@ -423,4 +429,129 @@ svg.notification-icon {
 .please-press-filter-button {
   margin-bottom: 1em;
   font-weight: bold;
+}
+
+
+.user_instructions_0 {
+  filter: opacity(1);
+}
+
+.user_instructions_1 {
+  filter: opacity(60%);
+}
+
+.user_instructions_2 {
+  filter: opacity(40%);
+}
+
+.user_instructions_3 {
+  filter: opacity(20%);
+}
+
+.user_instructions_4 {
+  filter: opacity(10%);
+}
+
+.float-right {
+  float: right;
+}
+
+.user-list {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.user-circle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.user-circle.color-1 {
+  background-color: #8e8e8e;
+}
+
+.user-circle.color-2 {
+  background-color: #a57c63;
+}
+
+.user-circle.color-3 {
+  background-color: #8f7c7c;
+}
+
+.user-circle.color-4 {
+  background-color: #9a927f;
+}
+
+.user-circle.color-5 {
+  background-color: #5e5d5d;
+}
+
+.user-circle.color-6 {
+  background-color: #676767;
+}
+
+.user-circle.color-7 {
+  background-color: #6d7d6d;
+}
+
+.user-circle.color-8 {
+  background-color: #7a7171;
+}
+
+.user-circle.color-9 {
+  background-color: #837d63;
+}
+
+.user-circle.color-10 {
+  background-color: #686a70;
+}
+
+/* Randomize color assignment */
+.user-circle:nth-child(1) {
+  background-color: #8e8e8e;
+}
+
+.user-circle:nth-child(2) {
+  background-color: #a57c63;
+}
+
+.user-circle:nth-child(3) {
+  background-color: #8f7c7c;
+}
+
+.user-circle:nth-child(4) {
+  background-color: #9a927f;
+}
+
+.user-circle:nth-child(5) {
+  background-color: #5e5d5d;
+}
+
+.user-circle:nth-child(6) {
+  background-color: #676767;
+}
+
+.user-circle:nth-child(7) {
+  background-color: #6d7d6d;
+}
+
+.user-circle:nth-child(8) {
+  background-color: #7a7171;
+}
+
+.user-circle:nth-child(9) {
+  background-color: #837d63;
+}
+
+/* Default to first color if more than 10 users */
+.user-circle:nth-child(n+11) {
+  background-color: #8e8e8e;
 }

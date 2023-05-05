@@ -19,6 +19,7 @@ const submitWithUser = (
         .contains(/^Submit$/)
         .click();
 
+    cy.wait(2000);
     cy.contains('Tasks I can complete', { timeout: 60000 });
 
     cy.get('.cds--btn').contains(/^Go$/).click();
@@ -40,18 +41,18 @@ const submitWithUser = (
         cy.get('.cds--text-area__wrapper').find('#root').type(username.concat(' is escalating to Budget owner.'));
     } else if (approvaltype === "providemoreinfo") {
         //Form 1
-        cy.contains('Task: Submit New Demand Request Details', { timeout: 60000 });
+        cy.contains('Task: Submit Details', { timeout: 60000 });
         cy.get('button')
             .contains(/^Submit$/)
             .click();
         //Form 2      
-        cy.contains('Task: Enter NDR Items', { timeout: 60000 });
-        cy.get('button')
-            .contains(/^Submit$/)
-            .click();
+        /* cy.contains('Task: Enter NDR Items', { timeout: 60000 });
+         cy.get('button')
+             .contains(/^Submit$/)
+             .click();*/
         //Form 3
         cy.contains(
-            'Review and provide any supporting information or files for your request.',
+            'Task: Review the Request',
             { timeout: 60000 });
 
         cy.get('.cds--text-area__wrapper').find('#root').clear().type('Providing additional info. Computer hardware includes the physical parts of a computer, such as the case, central processing unit (CPU), random access memory (RAM), monitor, mouse, keyboard, computer data storage, graphics card, sound card');
@@ -75,8 +76,11 @@ const submitWithUser = (
             .click();
 
     }
+
+    cy.visit('/');
+
     cy.location({ timeout: 60000 }).should((loc) => {
-        expect(loc.pathname).to.eq('/tasks');
+        expect(loc.pathname).to.eq('/');
     });
     cy.wait(2000);
     cy.logout();
@@ -88,7 +92,7 @@ describe('Equipment Path - Without Files', () => {
 
     Cypress._.times(1, () => {
         //Out of Policy. People Ops Partner Group and Budget owner approves the request
-        it.only('Out of Policy. People Ops Partner Group and Budget owner approves', () => {
+        it('Out of Policy. People Ops Partner Group and Budget owner approves', () => {
             let username = Cypress.env('requestor_username');
             let password = Cypress.env('requestor_password');
             cy.log('=====username : ' + username);
@@ -98,7 +102,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -116,10 +120,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -201,9 +206,13 @@ describe('Equipment Path - Without Files', () => {
                     .click();
 
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
                 cy.log('=====after logout ---');
 
 
@@ -248,7 +257,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -266,10 +275,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -321,9 +331,13 @@ describe('Equipment Path - Without Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -366,7 +380,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -384,10 +398,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -437,9 +452,13 @@ describe('Equipment Path - Without Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -499,7 +518,7 @@ describe('Equipment Path - Without Files', () => {
         });
 
         //Within Policy. People Ops Partner Group approves the request
-        it.only('Within Policy. People Ops Partner Group approves', () => {
+        it('Within Policy. People Ops Partner Group approves', () => {
             let username = Cypress.env('requestor_username');
             let password = Cypress.env('requestor_password');
             cy.log('=====username : ' + username);
@@ -509,7 +528,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -527,10 +546,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -581,9 +601,13 @@ describe('Equipment Path - Without Files', () => {
                     .click();
 
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -612,7 +636,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -630,10 +654,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -684,9 +709,13 @@ describe('Equipment Path - Without Files', () => {
                     .click();
 
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -715,7 +744,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -733,10 +762,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -787,9 +817,13 @@ describe('Equipment Path - Without Files', () => {
                     .click();
 
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -826,7 +860,7 @@ describe('Equipment Path - Without Files', () => {
             });
         });
         //Within Policy. People Ops Partner Group and Budget owner approves the request
-        it.only('Within Policy. People Ops Partner Group and Budget owner approves', () => {
+        it('Within Policy. People Ops Partner Group and Budget owner approves', () => {
             let username = Cypress.env('requestor_username');
             let password = Cypress.env('requestor_password');
             cy.log('=====username : ' + username);
@@ -836,7 +870,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -854,10 +888,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -908,9 +943,13 @@ describe('Equipment Path - Without Files', () => {
                     .click();
 
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -953,7 +992,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -971,10 +1010,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1024,9 +1064,13 @@ describe('Equipment Path - Without Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -1069,7 +1113,7 @@ describe('Equipment Path - Without Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -1087,10 +1131,11 @@ describe('Equipment Path - Without Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1140,9 +1185,13 @@ describe('Equipment Path - Without Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -1200,7 +1249,7 @@ describe('Equipment Path - With Files', () => {
 
     Cypress._.times(1, () => {
         //Out of Policy. People Ops Partner Group and Budget owner approves the request
-        it.only('Out of Policy. People Ops Partner Group and Budget owner approves', () => {
+        it('Out of Policy. People Ops Partner Group and Budget owner approves', () => {
             let username = Cypress.env('requestor_username');
             let password = Cypress.env('requestor_password');
             cy.log('=====username : ' + username);
@@ -1210,7 +1259,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -1228,10 +1277,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1353,10 +1403,14 @@ describe('Equipment Path - With Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
 
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -1399,7 +1453,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -1417,10 +1471,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1511,9 +1566,14 @@ describe('Equipment Path - With Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -1556,7 +1616,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -1574,10 +1634,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1667,9 +1728,14 @@ describe('Equipment Path - With Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -1729,7 +1795,7 @@ describe('Equipment Path - With Files', () => {
         });
 
         //Within Policy. People Ops Partner Group approves the request
-        it.only('Within Policy. People Ops Partner Group approves', () => {
+        it('Within Policy. People Ops Partner Group approves', () => {
             let username = Cypress.env('requestor_username');
             let password = Cypress.env('requestor_password');
             cy.log('=====username : ' + username);
@@ -1739,7 +1805,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -1757,10 +1823,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1852,9 +1919,14 @@ describe('Equipment Path - With Files', () => {
                     .click();
 
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -1883,7 +1955,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -1901,10 +1973,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -1996,9 +2069,14 @@ describe('Equipment Path - With Files', () => {
                     .click();
 
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -2027,7 +2105,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -2045,10 +2123,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -2139,9 +2218,14 @@ describe('Equipment Path - With Files', () => {
                     .click();
 
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -2178,7 +2262,7 @@ describe('Equipment Path - With Files', () => {
             });
         });
         //Within Policy. People Ops Partner Group and Budget owner approves the request
-        it.only('Within Policy. People Ops Partner Group and Budget owner approves', () => {
+        it('Within Policy. People Ops Partner Group and Budget owner approves', () => {
             let username = Cypress.env('requestor_username');
             let password = Cypress.env('requestor_password');
             cy.log('=====username : ' + username);
@@ -2188,7 +2272,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -2206,10 +2290,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -2300,9 +2385,14 @@ describe('Equipment Path - With Files', () => {
                     .click();
 
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -2345,7 +2435,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -2363,10 +2453,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -2456,9 +2547,14 @@ describe('Equipment Path - With Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.wait(9000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');
@@ -2501,7 +2597,7 @@ describe('Equipment Path - With Files', () => {
             cy.visit('/');
 
             cy.contains('Start New +').click();
-            cy.contains('Request Goods/Services');
+            cy.contains('Request Goods or Services');
 
             cy.runPrimaryBpmnFile(true);
 
@@ -2519,10 +2615,11 @@ describe('Equipment Path - With Files', () => {
             */
 
             cy.contains(
-                'Request Goods/Services',
+                'Request Goods or Services',
                 { timeout: 60000 }
             );
 
+            cy.wait(5000);
             cy.url().then((currentUrl) => {
                 // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
                 // extract the digits after /tasks
@@ -2613,9 +2710,14 @@ describe('Equipment Path - With Files', () => {
                     .contains(/^Submit$/)
                     .click();
 
+                cy.wait(20000);
+                cy.get('button')
+                    .contains(/^Return to Home$/)
+                    .click();
+
                 cy.contains('Started by me', { timeout: 60000 });
                 cy.logout();
-                cy.wait(1000);
+                cy.wait(2000);
 
                 let peopleOpsUsername = Cypress.env('peopleopssme_username');
                 let peopleOpsPassword = Cypress.env('peopleopssme_password');

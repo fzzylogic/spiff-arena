@@ -48,6 +48,11 @@ class TestGetAllPermissions(BaseTest):
             },
             {
                 "group_identifier": "my_test_group",
+                "uri": "/logs/typeahead-filter-values/hey:group:*",
+                "permissions": ["read"],
+            },
+            {
+                "group_identifier": "my_test_group",
                 "uri": "/process-instances/hey:group:*",
                 "permissions": ["create"],
             },
@@ -64,6 +69,11 @@ class TestGetAllPermissions(BaseTest):
             {
                 "group_identifier": "my_test_group",
                 "uri": "/process-data-file-download/hey:group:*",
+                "permissions": ["read"],
+            },
+            {
+                "group_identifier": "my_test_group",
+                "uri": "/event-error-details/hey:group:*",
                 "permissions": ["read"],
             },
         ]

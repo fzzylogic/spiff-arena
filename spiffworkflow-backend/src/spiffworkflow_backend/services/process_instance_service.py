@@ -2,7 +2,10 @@
 import base64
 import hashlib
 import time
+from datetime import datetime
+from datetime import timezone
 from typing import Any
+from typing import Dict
 from typing import Generator
 from typing import List
 from typing import Optional
@@ -12,6 +15,7 @@ from urllib.parse import unquote
 import sentry_sdk
 from flask import current_app
 from flask import g
+from SpiffWorkflow.bpmn.specs.events.event_definitions import TimerEventDefinition  # type: ignore
 from SpiffWorkflow.bpmn.specs.events.IntermediateEvent import _BoundaryEventParent  # type: ignore
 from SpiffWorkflow.task import Task as SpiffTask  # type: ignore
 
@@ -87,6 +91,29 @@ class ProcessInstanceService:
         return cls.create_process_instance(process_model, user)
 
     @classmethod
+    def waiting_event_can_be_skipped(cls, waiting_event: Dict[str, Any], now_in_utc: datetime) -> bool:
+        #
+        # over time this function can gain more knowledge of different event types,
+        # for now we are just handling Duration Timer events.
+        #
+        # example: {'event_type': 'Duration Timer', 'name': None, 'value': '2023-04-27T20:15:10.626656+00:00'}
+        #
+        event_type = waiting_event.get("event_type")
+        if event_type == "Duration Timer":
+            event_value = waiting_event.get("value")
+            if event_value is not None:
+                event_datetime = TimerEventDefinition.get_datetime(event_value)
+                return event_datetime > now_in_utc  # type: ignore
+        return False
+
+    @classmethod
+    def all_waiting_events_can_be_skipped(cls, waiting_events: List[Dict[str, Any]]) -> bool:
+        for waiting_event in waiting_events:
+            if not cls.waiting_event_can_be_skipped(waiting_event, datetime.now(timezone.utc)):
+                return False
+        return True
+
+    @classmethod
     def ready_user_task_has_associated_timer(cls, processor: ProcessInstanceProcessor) -> bool:
         for ready_user_task in processor.bpmn_process_instance.get_ready_user_tasks():
             if isinstance(ready_user_task.parent.task_spec, _BoundaryEventParent):
@@ -101,7 +128,10 @@ class ProcessInstanceService:
         if processor.process_instance_model.status != status_value:
             return True
 
-        return status_value == "user_input_required" and not cls.ready_user_task_has_associated_timer(processor)
+        if status_value == "user_input_required" and cls.ready_user_task_has_associated_timer(processor):
+            return cls.all_waiting_events_can_be_skipped(processor.bpmn_process_instance.waiting_events())
+
+        return False
 
     @classmethod
     def do_waiting(cls, status_value: str = ProcessInstanceStatus.waiting.value) -> None:
@@ -344,7 +374,7 @@ class ProcessInstanceService:
         data: dict[str, Any],
         user: UserModel,
     ) -> None:
-        AuthorizationService.assert_user_can_complete_spiff_task(process_instance.id, spiff_task, user)
+        AuthorizationService.assert_user_can_complete_task(process_instance.id, spiff_task.task_spec.name, user)
         cls.save_file_data_and_replace_with_digest_references(
             data,
             process_instance.id,
@@ -442,8 +472,8 @@ class ProcessInstanceService:
         # can complete it.
         can_complete = False
         try:
-            AuthorizationService.assert_user_can_complete_spiff_task(
-                processor.process_instance_model.id, spiff_task, g.user
+            AuthorizationService.assert_user_can_complete_task(
+                processor.process_instance_model.id, spiff_task.task_spec.name, g.user
             )
             can_complete = True
         except HumanTaskNotFoundError:
@@ -462,6 +492,12 @@ class ProcessInstanceService:
 
         serialized_task_spec = processor.serialize_task_spec(spiff_task.task_spec)
 
+        # Grab the last error message.
+        error_message = None
+        for event in processor.process_instance_model.process_instance_events:
+            for detail in event.error_details:
+                error_message = detail.message
+
         task = Task(
             spiff_task.id,
             spiff_task.task_spec.name,
@@ -479,6 +515,7 @@ class ProcessInstanceService:
             event_definition=serialized_task_spec.get("event_definition"),
             call_activity_process_identifier=call_activity_process_identifier,
             calling_subprocess_task_id=calling_subprocess_task_id,
+            error_message=error_message,
         )
 
         return task

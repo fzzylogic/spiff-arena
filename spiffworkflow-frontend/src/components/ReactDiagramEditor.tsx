@@ -1,7 +1,5 @@
 /* eslint-disable sonarjs/cognitive-complexity */
-// @ts-expect-error TS(7016) FIXME: Could not find a declaration file for module 'bpmn... Remove this comment to see the full error message
 import BpmnModeler from 'bpmn-js/lib/Modeler';
-// @ts-expect-error TS(7016) FIXME: Could not find a declaration file for module 'bpmn... Remove this comment to see the full error message
 import BpmnViewer from 'bpmn-js/lib/Viewer';
 import {
   BpmnPropertiesPanelModule,
@@ -19,7 +17,7 @@ import {
 
 import React, { useRef, useEffect, useState } from 'react';
 // @ts-ignore
-import { Button } from '@carbon/react';
+import { Button, ButtonSet, Modal, UnorderedList, Link } from '@carbon/react';
 
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css';
@@ -58,9 +56,13 @@ import { Can } from '@casl/react';
 import HttpService from '../services/HttpService';
 
 import ButtonWithConfirmation from './ButtonWithConfirmation';
-import { getBpmnProcessIdentifiers, makeid } from '../helpers';
+import {
+  getBpmnProcessIdentifiers,
+  makeid,
+  modifyProcessIdentifierForPathParam,
+} from '../helpers';
 import { useUriListForPermissions } from '../hooks/UriListForPermissions';
-import { PermissionsToCheck, Task } from '../interfaces';
+import { PermissionsToCheck, ProcessModelCaller, Task } from '../interfaces';
 import { usePermissionFetcher } from '../hooks/PermissionService';
 
 type OwnProps = {
@@ -85,6 +87,8 @@ type OwnProps = {
   onSearchProcessModels?: (..._args: any[]) => any;
   onElementsChanged?: (..._args: any[]) => any;
   url?: string;
+  callers?: ProcessModelCaller[];
+  activeUserElement?: React.ReactElement;
 };
 
 // https://codesandbox.io/s/quizzical-lake-szfyo?file=/src/App.js was a handy reference
@@ -110,6 +114,8 @@ export default function ReactDiagramEditor({
   onSearchProcessModels,
   onElementsChanged,
   url,
+  callers,
+  activeUserElement,
 }: OwnProps) {
   const [diagramXMLString, setDiagramXMLString] = useState('');
   const [diagramModelerState, setDiagramModelerState] = useState(null);
@@ -125,6 +131,8 @@ export default function ReactDiagramEditor({
   const { ability } = usePermissionFetcher(permissionRequestData);
   const navigate = useNavigate();
 
+  const [showingReferences, setShowingReferences] = useState(false);
+
   useEffect(() => {
     if (diagramModelerState) {
       return;
@@ -136,11 +144,14 @@ export default function ReactDiagramEditor({
     }
 
     const temp = document.createElement('template');
+    const panelId: string =
+      diagramType === 'readonly'
+        ? 'hidden-properties-panel'
+        : 'js-properties-panel';
     temp.innerHTML = `
       <div class="content with-diagram" id="js-drop-zone">
-        <div class="canvas ${canvasClass}" id="canvas"
-                            ></div>
-        <div class="properties-panel-parent" id="js-properties-panel"></div>
+        <div class="canvas ${canvasClass}" id="canvas"></div>
+        <div class="properties-panel-parent" id="${panelId}"></div>
       </div>
     `;
     const frag = temp.content;
@@ -566,10 +577,51 @@ export default function ReactDiagramEditor({
 
   const canViewXml = fileName !== undefined;
 
+  const showReferences = () => {
+    if (!callers) {
+      return null;
+    }
+    return (
+      <Modal
+        open={showingReferences}
+        modalHeading="Process Model References"
+        onRequestClose={() => setShowingReferences(false)}
+        passiveModal
+      >
+        <UnorderedList>
+          {callers.map((ref: ProcessModelCaller) => (
+            <li>
+              <Link
+                size="lg"
+                href={`/admin/process-models/${modifyProcessIdentifierForPathParam(
+                  ref.process_model_id
+                )}`}
+              >
+                {`${ref.display_name}`}
+              </Link>{' '}
+              ({ref.process_model_id})
+            </li>
+          ))}
+        </UnorderedList>
+      </Modal>
+    );
+  };
+
+  const getReferencesButton = () => {
+    if (callers && callers.length > 0) {
+      let buttonText = `View ${callers.length} Reference`;
+      if (callers.length > 1) buttonText += 's';
+      return (
+        <Button onClick={() => setShowingReferences(true)}>{buttonText}</Button>
+      );
+    }
+    return null;
+  };
+
   const userActionOptions = () => {
     if (diagramType !== 'readonly') {
       return (
-        <>
+        <ButtonSet>
           <Can
             I="PUT"
             a={targetUris.processModelFileShowPath}
@@ -621,11 +673,25 @@ export default function ReactDiagramEditor({
               </Button>
             )}
           </Can>
-        </>
+          {getReferencesButton()}
+          {/* only show other users if the current user can save the current diagram */}
+          <Can
+            I="PUT"
+            a={targetUris.processModelFileShowPath}
+            ability={ability}
+          >
+            {activeUserElement || null}
+          </Can>
+        </ButtonSet>
       );
     }
     return null;
   };
 
-  return <div>{userActionOptions()}</div>;
+  return (
+    <>
+      {userActionOptions()}
+      {showReferences()}
+    </>
+  );
 }

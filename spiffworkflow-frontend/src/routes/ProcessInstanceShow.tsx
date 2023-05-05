@@ -733,7 +733,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     if ('payload' in eventToSend)
       eventToSend.payload = JSON.parse(eventPayload);
     HttpService.makeCallToBackend({
-      path: `/send-event/${modifiedProcessModelId}/${params.process_instance_id}`,
+      path: targetUris.processInstanceSendEventPath,
       httpMethod: 'POST',
       successCallback: saveTaskDataResult,
       failureCallback: addError,
@@ -851,8 +851,13 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
         );
       }
       if (canResetProcess(task)) {
+        let titleText =
+          'This will reset (rewind) the process to put it into a state as if the execution of the process never went past this task. ';
+        titleText += 'Yes, we invented a time machine. ';
+        titleText += 'And no, you cannot go back after using this feature.';
         buttons.push(
           <Button
+            title={titleText}
             data-qa="reset-process-button"
             onClick={() => resetProcessInstance()}
           >

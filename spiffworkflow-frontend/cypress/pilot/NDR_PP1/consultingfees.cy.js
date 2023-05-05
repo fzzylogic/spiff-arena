@@ -19,6 +19,7 @@ const submitWithUser = (
     .contains(/^Submit$/)
     .click();
 
+  cy.wait(2000);
   cy.contains('Tasks I can complete', { timeout: 60000 });
 
   cy.get('.cds--btn').contains(/^Go$/).click();
@@ -36,18 +37,18 @@ const submitWithUser = (
     cy.get('.cds--text-area__wrapper').find('#root').type(username.concat(' needs additional info. A software license is a document that provides legally binding guidelines for the use and distribution of software.Software licenses typically provide end users with the right to END.'));
   } else if (approvaltype === "providemoreinfo") {
     //Form 1
-    cy.contains('Task: Submit New Demand Request Details', { timeout: 60000 });
+    cy.contains('Task: Submit Details', { timeout: 60000 });
     cy.get('button')
       .contains(/^Submit$/)
       .click();
     //Form 2      
-    cy.contains('Task: Enter NDR Items', { timeout: 60000 });
+    /*cy.contains('Task: Enter NDR Items', { timeout: 60000 });
     cy.get('button')
       .contains(/^Submit$/)
-      .click();
+      .click();*/
     //Form 3
     cy.contains(
-      'Review and provide any supporting information or files for your request.',
+      'Task: Review the Request',
       { timeout: 60000 });
 
     cy.get('.cds--text-area__wrapper').find('#root').clear().type('Providing additional info. It\’s free and easy to post a job. Simply fill in a title, description and budget and competitive bids come within minutes. No job is too big or too small. We\'ve got people for jobs of any size.');
@@ -72,8 +73,11 @@ const submitWithUser = (
       .click();
 
   }
+
+  cy.visit('/');
+
   cy.location({ timeout: 60000 }).should((loc) => {
-    expect(loc.pathname).to.eq('/tasks');
+    expect(loc.pathname).to.eq('/');
   });
   cy.wait(2000);
   cy.logout();
@@ -84,7 +88,7 @@ const submitWithUser = (
 describe('Consulting Fees Path - Without Files', () => {
   Cypress._.times(1, () => {
     //Budget owner approves the request
-    it.only('Budget owner approves', () => {
+    it('Budget owner approves', () => {
       let username = Cypress.env('requestor_username');
       let password = Cypress.env('requestor_password');
       cy.log('=====username : ' + username);
@@ -94,7 +98,7 @@ describe('Consulting Fees Path - Without Files', () => {
       cy.visit('/');
 
       cy.contains('Start New +').click();
-      cy.contains('Request Goods/Services');
+      cy.contains('Request Goods or Services');
 
       cy.runPrimaryBpmnFile(true);
 
@@ -112,13 +116,15 @@ describe('Consulting Fees Path - Without Files', () => {
       */
 
       cy.contains(
-        'Request Goods/Services',
+        'Request Goods or Services',
         { timeout: 60000 }
       );
 
-      cy.url().then((currentUrl) => {
+       cy.wait(5000);
+            cy.url().then((currentUrl) => {
         // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
         // extract the digits after /tasks
+
         const processInstanceId = currentUrl.match(/(?<=\/tasks\/)\d+/)[0];
         cy.log('==###############===processInstanceId : ', processInstanceId);
         let projectId = Cypress.env('project_id');
@@ -185,6 +191,10 @@ describe('Consulting Fees Path - Without Files', () => {
           .contains(/^Submit$/)
           .click();
 
+        cy.wait(3000);
+        cy.get('button')
+          .contains(/^Return to Home$/)
+          .click();
 
         cy.contains('Started by me', { timeout: 60000 });
         cy.logout();
@@ -217,7 +227,7 @@ describe('Consulting Fees Path - Without Files', () => {
       cy.visit('/');
 
       cy.contains('Start New +').click();
-      cy.contains('Request Goods/Services');
+      cy.contains('Request Goods or Services');
 
       cy.runPrimaryBpmnFile(true);
 
@@ -235,11 +245,12 @@ describe('Consulting Fees Path - Without Files', () => {
       */
 
       cy.contains(
-        'Request Goods/Services',
+        'Request Goods or Services',
         { timeout: 60000 }
       );
 
-      cy.url().then((currentUrl) => {
+       cy.wait(5000);
+            cy.url().then((currentUrl) => {
         // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
         // extract the digits after /tasks
         const processInstanceId = currentUrl.match(/(?<=\/tasks\/)\d+/)[0];
@@ -309,6 +320,11 @@ describe('Consulting Fees Path - Without Files', () => {
           .contains(/^Submit$/)
           .click();
 
+        cy.wait(3000);
+        cy.get('button')
+          .contains(/^Return to Home$/)
+          .click();
+
         cy.contains('Started by me', { timeout: 60000 });
         cy.logout();
         cy.wait(1000);
@@ -340,7 +356,7 @@ describe('Consulting Fees Path - Without Files', () => {
       cy.visit('/');
 
       cy.contains('Start New +').click();
-      cy.contains('Request Goods/Services');
+      cy.contains('Request Goods or Services');
 
       cy.runPrimaryBpmnFile(true);
 
@@ -358,11 +374,12 @@ describe('Consulting Fees Path - Without Files', () => {
       */
 
       cy.contains(
-        'Request Goods/Services',
+        'Request Goods or Services',
         { timeout: 60000 }
       );
 
-      cy.url().then((currentUrl) => {
+       cy.wait(5000);
+            cy.url().then((currentUrl) => {
         // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
         // extract the digits after /tasks
         const processInstanceId = currentUrl.match(/(?<=\/tasks\/)\d+/)[0];
@@ -433,6 +450,11 @@ describe('Consulting Fees Path - Without Files', () => {
           .contains(/^Submit$/)
           .click();
 
+        cy.wait(3000);
+        cy.get('button')
+          .contains(/^Return to Home$/)
+          .click();
+
         cy.contains('Started by me', { timeout: 60000 });
         cy.logout();
         cy.wait(1000);
@@ -478,7 +500,7 @@ describe('Consulting Fees Path - Without Files', () => {
 describe('Consulting Fees Path - With Files', () => {
   Cypress._.times(1, () => {
     //Budget owner approves the request
-    it.only('Budget owner approves', () => {
+    it('Budget owner approves', () => {
       let username = Cypress.env('requestor_username');
       let password = Cypress.env('requestor_password');
       cy.log('=====username : ' + username);
@@ -488,7 +510,7 @@ describe('Consulting Fees Path - With Files', () => {
       cy.visit('/');
 
       cy.contains('Start New +').click();
-      cy.contains('Request Goods/Services');
+      cy.contains('Request Goods or Services');
 
       cy.runPrimaryBpmnFile(true);
 
@@ -506,11 +528,12 @@ describe('Consulting Fees Path - With Files', () => {
       */
 
       cy.contains(
-        'Request Goods/Services',
+        'Request Goods or Services',
         { timeout: 60000 }
       );
 
-      cy.url().then((currentUrl) => {
+       cy.wait(5000);
+            cy.url().then((currentUrl) => {
         // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
         // extract the digits after /tasks
         const processInstanceId = currentUrl.match(/(?<=\/tasks\/)\d+/)[0];
@@ -622,7 +645,8 @@ describe('Consulting Fees Path - With Files', () => {
           .contains(/^Submit$/)
           .click();
 
-
+        cy.wait(9000);
+        cy.visit('/');
         cy.contains('Started by me', { timeout: 60000 });
         cy.logout();
         cy.wait(1000);
@@ -654,7 +678,7 @@ describe('Consulting Fees Path - With Files', () => {
       cy.visit('/');
 
       cy.contains('Start New +').click();
-      cy.contains('Request Goods/Services');
+      cy.contains('Request Goods or Services');
 
       cy.runPrimaryBpmnFile(true);
 
@@ -672,11 +696,12 @@ describe('Consulting Fees Path - With Files', () => {
       */
 
       cy.contains(
-        'Request Goods/Services',
+        'Request Goods or Services',
         { timeout: 60000 }
       );
 
-      cy.url().then((currentUrl) => {
+       cy.wait(5000);
+            cy.url().then((currentUrl) => {
         // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
         // extract the digits after /tasks
         const processInstanceId = currentUrl.match(/(?<=\/tasks\/)\d+/)[0];
@@ -788,6 +813,11 @@ describe('Consulting Fees Path - With Files', () => {
           .contains(/^Submit$/)
           .click();
 
+        cy.wait(9000);
+        cy.get('button')
+          .contains(/^Return to Home$/)
+          .click();
+
         cy.contains('Started by me', { timeout: 60000 });
         cy.logout();
         cy.wait(1000);
@@ -819,7 +849,7 @@ describe('Consulting Fees Path - With Files', () => {
       cy.visit('/');
 
       cy.contains('Start New +').click();
-      cy.contains('Request Goods/Services');
+      cy.contains('Request Goods or Services');
 
       cy.runPrimaryBpmnFile(true);
 
@@ -837,11 +867,12 @@ describe('Consulting Fees Path - With Files', () => {
       */
 
       cy.contains(
-        'Request Goods/Services',
+        'Request Goods or Services',
         { timeout: 60000 }
       );
 
-      cy.url().then((currentUrl) => {
+       cy.wait(5000);
+            cy.url().then((currentUrl) => {
         // if url is "/tasks/8/d37c2f0f-016a-4066-b669-e0925b759560"
         // extract the digits after /tasks
         const processInstanceId = currentUrl.match(/(?<=\/tasks\/)\d+/)[0];
@@ -951,7 +982,8 @@ describe('Consulting Fees Path - With Files', () => {
         cy.get('button')
           .contains(/^Submit$/)
           .click();
-
+        cy.wait(9000);
+        cy.visit('/');
         cy.contains('Started by me', { timeout: 60000 });
         cy.logout();
         cy.wait(1000);

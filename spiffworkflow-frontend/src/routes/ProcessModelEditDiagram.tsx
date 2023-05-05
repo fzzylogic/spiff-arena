@@ -25,20 +25,22 @@ import Col from 'react-bootstrap/Col';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 
 import MDEditor from '@uiw/react-md-editor';
+import HttpService from '../services/HttpService';
 import ReactDiagramEditor from '../components/ReactDiagramEditor';
 import ProcessBreadcrumb from '../components/ProcessBreadcrumb';
-import HttpService from '../services/HttpService';
 import useAPIError from '../hooks/UseApiError';
 import { makeid, modifyProcessIdentifierForPathParam } from '../helpers';
 import {
   CarbonComboBoxProcessSelection,
   ProcessFile,
   ProcessModel,
+  ProcessModelCaller,
   ProcessReference,
 } from '../interfaces';
 import ProcessSearch from '../components/ProcessSearch';
 import { Notification } from '../components/Notification';
 import { usePrompt } from '../hooks/UsePrompt';
+import ActiveUsers from '../components/ActiveUsers';
 
 export default function ProcessModelEditDiagram() {
   const [showFileNameEditor, setShowFileNameEditor] = useState(false);
@@ -119,6 +121,8 @@ export default function ProcessModelEditDiagram() {
 
   const processModelPath = `process-models/${modifiedProcessModelId}`;
 
+  const [callers, setCallers] = useState<ProcessModelCaller[]>([]);
+
   usePrompt('Changes you made may not be saved.', diagramHasChanges);
 
   useEffect(() => {
@@ -136,23 +140,19 @@ export default function ProcessModelEditDiagram() {
       path: `/processes`,
       successCallback: processResults,
     });
-  }, []);
-
-  useEffect(() => {
-    const processResult = (result: ProcessModel) => {
-      setProcessModel(result);
-    };
-    HttpService.makeCallToBackend({
-      path: `/${processModelPath}?include_file_references=true`,
-      successCallback: processResult,
-    });
-  }, [processModelPath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // it is critical to only run this once.
 
   useEffect(() => {
     const fileResult = (result: any) => {
       setProcessModelFile(result);
       setBpmnXmlForDiagramRendering(result.file_contents);
     };
+
+    HttpService.makeCallToBackend({
+      path: `/${processModelPath}?include_file_references=true`,
+      successCallback: setProcessModel,
+    });
 
     if (params.file_name) {
       HttpService.makeCallToBackend({
@@ -162,14 +162,26 @@ export default function ProcessModelEditDiagram() {
     }
   }, [processModelPath, params]);
 
+  useEffect(() => {
+    if (processModel !== null) {
+      HttpService.makeCallToBackend({
+        path: `/processes/callers?bpmn_process_identifier=${processModel.primary_process_id}`,
+        successCallback: setCallers,
+      });
+    }
+  }, [processModel]);
+
   const handleFileNameCancel = () => {
     setShowFileNameEditor(false);
     setNewFileName('');
     setProcessModelFileInvalidText('');
   };
 
-  const navigateToProcessModelFile = (_result: any) => {
+  const navigateToProcessModelFile = (file: ProcessFile) => {
     setDisplaySaveFileMessage(true);
+    if (file.file_contents_hash) {
+      setProcessModelFile(file);
+    }
     if (!params.file_name) {
       const fileNameWithExtension = `${newFileName}.${searchParams.get(
         'file_type'
@@ -194,6 +206,9 @@ export default function ProcessModelEditDiagram() {
       httpMethod = 'POST';
     } else {
       url += `/${fileNameWithExtension}`;
+      if (processModelFile && processModelFile.file_contents_hash) {
+        url += `?file_contents_hash=${processModelFile.file_contents_hash}`;
+      }
     }
     if (!fileNameWithExtension) {
       handleShowFileNameEditor();
@@ -958,6 +973,8 @@ export default function ProcessModelEditDiagram() {
         onDmnFilesRequested={onDmnFilesRequested}
         onSearchProcessModels={onSearchProcessModels}
         onElementsChanged={onElementsChanged}
+        callers={callers}
+        activeUserElement={<ActiveUsers />}
       />
     );
   };

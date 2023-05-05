@@ -18,7 +18,6 @@ from spiffworkflow_backend.exceptions.process_entity_not_found_error import (
 )
 from spiffworkflow_backend.models.principal import PrincipalModel
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModel
-from spiffworkflow_backend.models.process_instance import ProcessInstanceModelSchema
 from spiffworkflow_backend.models.process_instance_file_data import (
     ProcessInstanceFileDataModel,
 )
@@ -78,7 +77,7 @@ def process_list() -> Any:
     return SpecReferenceSchema(many=True).dump(references)
 
 
-def process_caller_lists(bpmn_process_identifier: str) -> Any:
+def process_caller_list(bpmn_process_identifier: str) -> Any:
     callers = ProcessCallerService.callers(bpmn_process_identifier)
     references = (
         SpecReferenceCache.query.filter_by(type="process").filter(SpecReferenceCache.identifier.in_(callers)).all()
@@ -187,28 +186,6 @@ def _get_required_parameter_or_raise(parameter: str, post_body: dict[str, Any]) 
         )
 
     return return_value
-
-
-def send_bpmn_event(
-    modified_process_model_identifier: str,
-    process_instance_id: str,
-    body: Dict,
-) -> Response:
-    """Send a bpmn event to a workflow."""
-    process_instance = ProcessInstanceModel.query.filter(ProcessInstanceModel.id == int(process_instance_id)).first()
-    if process_instance:
-        processor = ProcessInstanceProcessor(process_instance)
-        processor.send_bpmn_event(body)
-    else:
-        raise ApiError(
-            error_code="send_bpmn_event_error",
-            message=f"Could not send event to Instance: {process_instance_id}",
-        )
-    return Response(
-        json.dumps(ProcessInstanceModelSchema().dump(process_instance)),
-        status=200,
-        mimetype="application/json",
-    )
 
 
 def _commit_and_push_to_git(message: str) -> None:

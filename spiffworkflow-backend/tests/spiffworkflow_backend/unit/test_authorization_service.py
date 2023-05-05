@@ -124,7 +124,9 @@ class TestAuthorizationService(BaseTest):
         """Test_explode_permissions_all_on_process_group."""
         expected_permissions = sorted(
             [
+                ("/event-error-details/some-process-group:some-process-model:*", "read"),
                 ("/logs/some-process-group:some-process-model:*", "read"),
+                ("/logs/typeahead-filter-values/some-process-group:some-process-model:*", "read"),
                 ("/process-data/some-process-group:some-process-model:*", "read"),
                 (
                     "/process-data-file-download/some-process-group:some-process-model:*",
@@ -173,8 +175,13 @@ class TestAuthorizationService(BaseTest):
     ) -> None:
         """Test_explode_permissions_start_on_process_group."""
         expected_permissions = [
+            ("/event-error-details/some-process-group:some-process-model:*", "read"),
             (
                 "/logs/some-process-group:some-process-model:*",
+                "read",
+            ),
+            (
+                "/logs/typeahead-filter-values/some-process-group:some-process-model:*",
                 "read",
             ),
             (
@@ -202,11 +209,13 @@ class TestAuthorizationService(BaseTest):
         """Test_explode_permissions_all_on_process_model."""
         expected_permissions = sorted(
             [
+                ("/event-error-details/some-process-group:some-process-model/*", "read"),
                 ("/logs/some-process-group:some-process-model/*", "read"),
                 (
                     "/process-data-file-download/some-process-group:some-process-model/*",
                     "read",
                 ),
+                ("/logs/typeahead-filter-values/some-process-group:some-process-model/*", "read"),
                 ("/process-data/some-process-group:some-process-model/*", "read"),
                 (
                     "/process-instance-suspend/some-process-group:some-process-model/*",
@@ -248,9 +257,14 @@ class TestAuthorizationService(BaseTest):
         """Test_explode_permissions_start_on_process_model."""
         expected_permissions = [
             (
+                "/event-error-details/some-process-group:some-process-model/*",
+                "read",
+            ),
+            (
                 "/logs/some-process-group:some-process-model/*",
                 "read",
             ),
+            ("/logs/typeahead-filter-values/some-process-group:some-process-model/*", "read"),
             (
                 "/process-data-file-download/some-process-group:some-process-model/*",
                 "read",
@@ -275,14 +289,16 @@ class TestAuthorizationService(BaseTest):
     ) -> None:
         """Test_explode_permissions_basic."""
         expected_permissions = [
-            ("/logs/types", "read"),
+            ("/active-users/*", "read"),
             ("/process-instances/find-by-id/*", "read"),
-            ("/process-instances/for-me", "read"),
+            ("/process-instances/for-me", "create"),
+            ("/process-instances/report-metadata", "read"),
             ("/process-instances/reports/*", "create"),
             ("/process-instances/reports/*", "delete"),
             ("/process-instances/reports/*", "read"),
             ("/process-instances/reports/*", "update"),
             ("/processes", "read"),
+            ("/processes/callers", "read"),
             ("/service-tasks", "read"),
             ("/tasks/*", "create"),
             ("/tasks/*", "delete"),

@@ -253,7 +253,9 @@ class TestProcessInstanceProcessor(BaseTest):
         processor = ProcessInstanceProcessor(process_instance)
 
         # this task will be found within subprocesses
-        spiff_task = processor.__class__.get_task_by_bpmn_identifier("do_nothing", processor.bpmn_process_instance)
+        spiff_task = processor.__class__.get_task_by_bpmn_identifier(
+            "level_3_script_task", processor.bpmn_process_instance
+        )
         assert spiff_task is not None
         assert spiff_task.state == TaskState.COMPLETED
 
@@ -311,6 +313,7 @@ class TestProcessInstanceProcessor(BaseTest):
         ProcessInstanceService.complete_form_task(processor, spiff_manual_task, {}, initiator_user, human_task_one)
         assert process_instance.status == "complete"
 
+    # this test has been failing intermittently for some time on windows, perhaps ever since it was first added
     def test_properly_resets_process_to_given_task_with_call_activity(
         self,
         app: Flask,
@@ -338,48 +341,148 @@ class TestProcessInstanceProcessor(BaseTest):
         processor = ProcessInstanceProcessor(process_instance)
         processor.do_engine_steps(save=True)
         assert len(process_instance.active_human_tasks) == 1
-        initial_human_task_id = process_instance.active_human_tasks[0].id
+        human_task_one = process_instance.active_human_tasks[0]
+        initial_human_task_id = human_task_one.id
         assert len(process_instance.active_human_tasks) == 1
         assert initial_human_task_id == process_instance.active_human_tasks[0].id
+        assert len(process_instance.human_tasks) == 1
+
+        spiff_manual_task = processor.bpmn_process_instance.get_task_from_id(UUID(human_task_one.task_id))
+        assert len(process_instance.active_human_tasks) == 1, "expected 1 active human task"
+
+        ProcessInstanceService.complete_form_task(processor, spiff_manual_task, {}, initiator_user, human_task_one)
+        assert len(process_instance.human_tasks) == 2, "expected 2 human tasks after first one is completed"
+        assert (
+            len(process_instance.active_human_tasks) == 1
+        ), "expected 1 active human tasks after 1st one is completed"
+
+        # unnecessary lookup just in case on windows
+        process_instance = ProcessInstanceModel.query.filter_by(id=process_instance.id).first()
 
         human_task_one = process_instance.active_human_tasks[0]
         spiff_manual_task = processor.bpmn_process_instance.get_task_from_id(UUID(human_task_one.task_id))
         ProcessInstanceService.complete_form_task(processor, spiff_manual_task, {}, initiator_user, human_task_one)
-        human_task_one = process_instance.active_human_tasks[0]
-        spiff_manual_task = processor.bpmn_process_instance.get_task_from_id(UUID(human_task_one.task_id))
-        ProcessInstanceService.complete_form_task(processor, spiff_manual_task, {}, initiator_user, human_task_one)
+        assert (
+            len(process_instance.active_human_tasks) == 1
+        ), "expected 1 active human tasks after 2nd one is completed, as we have looped back around."
 
         processor.suspend()
-        task_model_to_reset_to = (
+
+        all_task_models_matching_top_level_subprocess_script = (
             TaskModel.query.join(TaskDefinitionModel)
             .filter(TaskDefinitionModel.bpmn_identifier == "top_level_subprocess_script")
             .order_by(TaskModel.id.desc())  # type: ignore
-            .first()
+            .all()
         )
+        assert len(all_task_models_matching_top_level_subprocess_script) == 1
+        task_model_to_reset_to = all_task_models_matching_top_level_subprocess_script[0]
         assert task_model_to_reset_to is not None
+        assert len(process_instance.human_tasks) == 3, "expected 3 human tasks before reset"
         ProcessInstanceProcessor.reset_process(process_instance, task_model_to_reset_to.guid)
+        assert len(process_instance.human_tasks) == 2, "still expected 2 human tasks after reset"
 
         # make sure sqlalchemy session matches current db state
         db.session.expire_all()
+        assert (
+            len(process_instance.human_tasks) == 2
+        ), "still expected 3 human tasks after reset and session expire_all"
+
         process_instance = ProcessInstanceModel.query.filter_by(id=process_instance.id).first()
         processor = ProcessInstanceProcessor(process_instance)
 
-        # make sure we reset to the task we expected
+        # make sure we did actually reset to the task we expected
         ready_or_waiting_tasks = processor.get_all_ready_or_waiting_tasks()
         top_level_subprocess_script_spiff_task = next(
             task for task in ready_or_waiting_tasks if task.task_spec.name == "top_level_subprocess_script"
         )
         assert top_level_subprocess_script_spiff_task is not None
         processor.resume()
+        assert (
+            len(process_instance.human_tasks) == 2
+        ), "expected 2 human tasks after resume since resume does not do anything in that regard"
+        ready_or_waiting_tasks = processor.get_all_ready_or_waiting_tasks()
+        assert len(ready_or_waiting_tasks) == 2
+        ready_or_waiting_task_identifiers = [t.task_spec.name for t in ready_or_waiting_tasks]
+        assert sorted(["top_level_subprocess_script", "top_level_subprocess"]) == sorted(
+            ready_or_waiting_task_identifiers
+        )
         processor.do_engine_steps(save=True, execution_strategy_name="greedy")
 
+        ready_or_waiting_tasks = processor.get_all_ready_or_waiting_tasks()
+        assert len(ready_or_waiting_tasks) == 1
+
+        # this assertion is failing intermittently on windows
+        # it's top_level_subprocess on windows sometimes
+        assert ready_or_waiting_tasks[0].task_spec.name == "top_level_manual_task_two"
+
+        # this assertion is failing intermittently on windows
+        assert len(process_instance.human_tasks) == 3, "expected 3 human tasks after reset and do_engine_steps"
+
+        spiff_task_guid_strings = [ht.task_id for ht in process_instance.human_tasks]
+        unique_task_guids = set(spiff_task_guid_strings)
+        assert len(unique_task_guids) == 3, "expected 3 unique task guids after reset and do_engine_steps"
+
+        # reload again, just in case, since the assertion where it says there should be 1 active_human_task
+        # is failing intermittently on windows, so just debugging.
+        process_instance = ProcessInstanceModel.query.filter_by(id=process_instance.id).first()
         assert len(process_instance.active_human_tasks) == 1
+
         human_task_one = process_instance.active_human_tasks[0]
         spiff_manual_task = processor.bpmn_process_instance.get_task_from_id(UUID(human_task_one.task_id))
         ProcessInstanceService.complete_form_task(processor, spiff_manual_task, {}, initiator_user, human_task_one)
         processor.do_engine_steps(save=True, execution_strategy_name="greedy")
 
         assert process_instance.status == "complete"
+
+    def test_properly_resets_process_on_tasks_with_boundary_events(
+        self,
+        app: Flask,
+        client: FlaskClient,
+        with_db_and_bpmn_file_cleanup: None,
+        with_super_admin_user: UserModel,
+    ) -> None:
+        self.create_process_group_with_api(client, with_super_admin_user, "test_group", "test_group")
+        process_model = load_test_spec(
+            process_model_id="test_group/boundary_event_reset",
+            process_model_source_directory="boundary_event_reset",
+        )
+        process_instance = self.create_process_instance_from_process_model(
+            process_model=process_model, user=with_super_admin_user
+        )
+        processor = ProcessInstanceProcessor(process_instance)
+        processor.do_engine_steps(save=True)
+        assert len(process_instance.active_human_tasks) == 1
+        human_task_one = process_instance.active_human_tasks[0]
+        spiff_manual_task = processor.bpmn_process_instance.get_task_from_id(UUID(human_task_one.task_id))
+        ProcessInstanceService.complete_form_task(
+            processor, spiff_manual_task, {}, with_super_admin_user, human_task_one
+        )
+        assert (
+            len(process_instance.active_human_tasks) == 1
+        ), "expected 1 active human tasks after 2nd one is completed"
+        assert process_instance.active_human_tasks[0].task_title == "Final"
+
+        # Reset the process back to the task within the call activity that contains a timer_boundary event.
+        reset_to_spiff_task: SpiffTask = processor.__class__.get_task_by_bpmn_identifier(
+            "manual_task_1", processor.bpmn_process_instance
+        )
+        processor.suspend()
+        processor = ProcessInstanceProcessor(process_instance)
+        ProcessInstanceProcessor.reset_process(process_instance, str(reset_to_spiff_task.id))
+        human_task_one = process_instance.active_human_tasks[0]
+        assert human_task_one.task_title == "Manual Task #1"
+        processor = ProcessInstanceProcessor(process_instance)
+        processor.manual_complete_task(str(spiff_manual_task.id), execute=True)
+        processor = ProcessInstanceProcessor(process_instance)
+        processor.resume()
+        processor.do_engine_steps(save=True)
+        process_instance = ProcessInstanceModel.query.filter_by(id=process_instance.id).first()
+
+        assert len(process_instance.active_human_tasks) == 1
+        assert process_instance.active_human_tasks[0].task_title == "Final", (
+            "once we reset, resume, and complete the task, we should be back to the Final step again, and not"
+            "stuck waiting for the call activity to complete (which was happening in a bug I'm fixing right now)"
+        )
 
     def test_properly_saves_tasks_when_running(
         self,
