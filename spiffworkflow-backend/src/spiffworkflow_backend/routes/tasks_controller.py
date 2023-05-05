@@ -396,7 +396,14 @@ def _interstitial_stream(process_instance: ProcessInstanceModel) -> Generator[st
         )
 
     def render_instructions(spiff_task: SpiffTask) -> str:
-        task_model = TaskModel.query.filter_by(guid=str(spiff_task.id)).first()
+        task_models = TaskModel.query.filter_by(guid=str(spiff_task.id)).all()
+        current_app.logger.info(task_models)
+        task_model = task_models[0] if len(task_models) > 0 else None
+        if task_model is None:
+            current_app.logger.info(f"------- no task: {spiff_task.id}")
+            import time
+            time.sleep(10)
+            return f"TODO: {spiff_task.id}"
         extensions = TaskService.get_extensions_from_task_model(task_model)
         return _render_instructions_for_end_user(task_model, extensions)
 
