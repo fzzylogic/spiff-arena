@@ -138,6 +138,12 @@ class TaskModelSavingDelegate(EngineStepDelegate):
         self.spiff_tasks_to_process: set[UUID] = set()
         self.spiff_task_timestamps: dict[UUID, StartAndEndTimes] = {}
 
+        #from flask import current_app
+        #current_app.logger.info("-----------------------")
+        #for k, v in bpmn_definition_to_task_definitions_mappings.items():
+        #    current_app.logger.info(f"\n{k}\n{v}\n")
+        #current_app.logger.info("-----------------------")
+
         self.task_service = TaskService(
             process_instance=self.process_instance,
             serializer=self.serializer,

@@ -401,9 +401,7 @@ def _interstitial_stream(process_instance: ProcessInstanceModel) -> Generator[st
         task_model = task_models[0] if len(task_models) > 0 else None
         if task_model is None:
             current_app.logger.info(f"------- no task: {spiff_task.id}")
-            import time
-            time.sleep(10)
-            return f"TODO: {spiff_task.id}"
+            return f"lazy loading {spiff_task.id}"
         extensions = TaskService.get_extensions_from_task_model(task_model)
         return _render_instructions_for_end_user(task_model, extensions)
 

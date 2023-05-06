@@ -702,10 +702,12 @@ class ProcessInstanceProcessor:
                     single_bpmn_process_dict = cls._get_bpmn_process_dict(bpmn_subprocess)
                     spiff_bpmn_process_dict["subprocesses"][bpmn_subprocess.guid] = single_bpmn_process_dict
 
-                tasks = TaskModel.query.filter(
-                    TaskModel.bpmn_process_id.in_(bpmn_subprocess_id_to_guid_mappings.keys())  # type: ignore
-                ).all()
-                cls._get_tasks_dict(tasks, spiff_bpmn_process_dict, bpmn_subprocess_id_to_guid_mappings)
+                bpmn_subprocess_ids = bpmn_subprocess_id_to_guid_mappings.keys()
+                if len(bpmn_subprocess_ids) > 0:
+                    tasks = TaskModel.query.filter(
+                        TaskModel.bpmn_process_id.in_(bpmn_subprocess_ids)  # type: ignore
+                    ).all()
+                    cls._get_tasks_dict(tasks, spiff_bpmn_process_dict, bpmn_subprocess_id_to_guid_mappings)
 
         return spiff_bpmn_process_dict
 
