@@ -1586,10 +1586,14 @@ class ProcessInstanceProcessor:
                 if lazy_subprocess_specs is None:
                     continue
 
+                current_app.logger.info(f"\ntasks before lazy load:\n{self.bpmn_process_instance.get_tasks()}\n")
+
                 for name, spec in lazy_subprocess_specs.items():
                     if name not in loaded_specs:
                         self.bpmn_process_instance.subprocess_specs[name] = spec
                         loaded_specs.add(name)
+
+                current_app.logger.info(f"\ntasks after lazy load:\n{self.bpmn_process_instance.get_tasks()}\n")
 
     def refresh_waiting_tasks(self) -> None:
         self.lazy_load_subprocess_specs()

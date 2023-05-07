@@ -401,7 +401,7 @@ def _interstitial_stream(process_instance: ProcessInstanceModel) -> Generator[st
         task_model = task_models[0] if len(task_models) > 0 else None
         if task_model is None:
             current_app.logger.info(f"------- no task: {spiff_task.id}")
-            return f"lazy loading {spiff_task.id}"
+            return "..."
         extensions = TaskService.get_extensions_from_task_model(task_model)
         return _render_instructions_for_end_user(task_model, extensions)
 
@@ -761,6 +761,12 @@ def _get_spiff_task_from_process_instance(
     if processor is None:
         processor = ProcessInstanceProcessor(process_instance)
     task_uuid = uuid.UUID(task_guid)
+    #
+    # TODO: this is an example integration point, outside of the processor we can't directly
+    # ask the bpmn_process_instance for tasks since they might not be loaded in yet. ideally
+    # have a workflow service that orchestrates tasks/bpmn definitions/element units to form
+    # a workflow?
+    #
     spiff_task = processor.bpmn_process_instance.get_task_from_id(task_uuid)
 
     if spiff_task is None:
