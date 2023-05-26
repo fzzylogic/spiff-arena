@@ -1,5 +1,7 @@
 """Message_service."""
 from typing import Optional
+from spiffworkflow_backend.services.process_instance_queue_service import ProcessInstanceQueueService
+from flask import current_app
 
 from spiffworkflow_backend.models.db import db
 from spiffworkflow_backend.models.message_instance import MessageInstanceModel
@@ -49,6 +51,7 @@ class MessageService:
         ).all()
         message_instance_receive: Optional[MessageInstanceModel] = None
         try:
+            receiving_process = None
             for message_instance in available_receive_messages:
                 if message_instance.correlates(message_instance_send, CustomBpmnScriptEngine()):
                     message_instance_receive = message_instance
@@ -71,30 +74,32 @@ class MessageService:
                 receiving_process = MessageService.get_process_instance_for_message_instance(message_instance_receive)
 
             # Assure we can send the message, otherwise keep going.
-            if message_instance_receive is None or not receiving_process.can_receive_message():
+            if message_instance_receive is None or not receiving_process or not receiving_process.can_receive_message():
                 message_instance_send.status = "ready"
                 message_instance_send.status = "ready"
                 db.session.add(message_instance_send)
                 db.session.commit()
                 return None
 
-            # Set the receiving message to running, so it is not altered elswhere ...
-            message_instance_receive.status = "running"
+            # lock the process instance so waiting instances aren't picked up by the background processor
+            with ProcessInstanceQueueService.dequeued(receiving_process):
+                # Set the receiving message to running, so it is not altered elswhere ...
+                message_instance_receive.status = "running"
 
-            cls.process_message_receive(
-                receiving_process,
-                message_instance_receive,
-                message_instance_send.name,
-                message_instance_send.payload,
-            )
-            message_instance_receive.status = "completed"
-            message_instance_receive.counterpart_id = message_instance_send.id
-            db.session.add(message_instance_receive)
-            message_instance_send.status = "completed"
-            message_instance_send.counterpart_id = message_instance_receive.id
-            db.session.add(message_instance_send)
-            db.session.commit()
-            return message_instance_receive
+                cls.process_message_receive(
+                    receiving_process,
+                    message_instance_receive,
+                    message_instance_send.name,
+                    message_instance_send.payload,
+                )
+                message_instance_receive.status = "completed"
+                message_instance_receive.counterpart_id = message_instance_send.id
+                db.session.add(message_instance_receive)
+                message_instance_send.status = "completed"
+                message_instance_send.counterpart_id = message_instance_receive.id
+                db.session.add(message_instance_send)
+                db.session.commit()
+                return message_instance_receive
 
         except Exception as exception:
             db.session.rollback()
@@ -157,7 +162,15 @@ class MessageService:
         message_payload: dict,
     ) -> None:
         processor_receive = ProcessInstanceProcessor(process_instance_receive)
+        # if message_model_name == 'Message Response Two':
+        #     current_app.config['APP_SCHEDULER'].pause()
+        #     import pdb; pdb.set_trace()
+        # try:
         processor_receive.bpmn_process_instance.catch_bpmn_message(message_model_name, message_payload)
+        # except Exception as ex:
+        #     current_app.config['APP_SCHEDULER'].pause()
+        #     # import pdb; pdb.set_trace()
+        #     raise ex
         processor_receive.do_engine_steps(save=True)
         message_instance_receive.status = MessageStatuses.completed.value
         db.session.add(message_instance_receive)

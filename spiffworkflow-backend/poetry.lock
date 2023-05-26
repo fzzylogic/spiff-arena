@@ -2768,17 +2768,15 @@ category = "main"
 optional = false
 python-versions = "*"
 files = []
-develop = false
+develop = true
 
 [package.dependencies]
 configparser = "*"
 lxml = "*"
 
 [package.source]
-type = "git"
-url = "https://github.com/sartography/SpiffWorkflow"
-reference = "main"
-resolved_reference = "03316babbd59895e91a334c433bc55527dedf4e2"
+type = "directory"
+url = "../../SpiffWorkflow"
 
 [[package]]
 name = "sqlalchemy"
@@ -3358,4 +3356,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.12"
-content-hash = "0b45b6c77237e13145782e4062d693ba2dac9f43c3dffc923809d3dd5e45137d"
+content-hash = "b5a164bf1eced88e422ba220e5686085b15c6601ca302cbd80252c9b17c21430"

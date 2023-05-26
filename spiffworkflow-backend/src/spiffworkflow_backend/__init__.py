@@ -66,8 +66,7 @@ class MyJSONEncoder(DefaultJSONProvider):
         return super().dumps(obj, **kwargs)
 
 
-def start_scheduler(app: flask.app.Flask, scheduler_class: BaseScheduler = BackgroundScheduler) -> None:
-    """Start_scheduler."""
+def start_scheduler(app: flask.app.Flask, scheduler_class: BaseScheduler = BackgroundScheduler) -> Any:
     scheduler = scheduler_class()
 
     # TODO: polling intervals for messages job
@@ -103,6 +102,7 @@ def start_scheduler(app: flask.app.Flask, scheduler_class: BaseScheduler = Backg
         seconds=user_input_required_polling_interval_in_seconds,
     )
     scheduler.start()
+    return scheduler
 
 
 def should_start_scheduler(app: flask.app.Flask) -> bool:
@@ -163,7 +163,8 @@ def create_app() -> flask.app.Flask:
     app.json = MyJSONEncoder(app)
 
     if should_start_scheduler(app):
-        start_scheduler(app)
+        scheduler = start_scheduler(app)
+        app.config['APP_SCHEDULER'] = scheduler
 
     configure_sentry(app)
 

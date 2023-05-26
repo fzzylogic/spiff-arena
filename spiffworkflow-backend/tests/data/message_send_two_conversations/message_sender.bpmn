@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:spiffworkflow="http://spiffworkflow.org/bpmn/schema/1.0/core" id="Definitions_96f6665" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="3.0.0-dev">
   <bpmn:collaboration id="Collaboration_0oye1os">
-    <bpmn:participant id="message_initiator" name="Message Initiator" processRef="message_send_process" />
+    <bpmn:participant id="message_initiator" name="Message Initiator" processRef="message_send_process_for_two" />
     <bpmn:participant id="message-receiver-one" name="Message Receiver One" />
     <bpmn:participant id="message-receiver-two" name="Message Receiver Two" />
     <bpmn:messageFlow id="message_send_flow" name="Message Send Flow" sourceRef="send_message_to_one" targetRef="message-receiver-one" />
@@ -33,7 +33,7 @@
       <bpmn:formalExpression>topicb_one</bpmn:formalExpression>
     </bpmn:correlationPropertyRetrievalExpression>
   </bpmn:correlationProperty>
-  <bpmn:process id="message_send_process" name="Message Send Process" isExecutable="true">
+  <bpmn:process id="message_send_process_for_two" name="Message Send Process For Two" isExecutable="true">
     <bpmn:sequenceFlow id="Flow_10conab" sourceRef="StartEvent_1" targetRef="set_topic_one" />
     <bpmn:sequenceFlow id="Flow_1yt3owq" sourceRef="Event_1wcluza" targetRef="receive_message_response_two" />
     <bpmn:sequenceFlow id="Flow_01u8qkn" sourceRef="receive_message_response_two" targetRef="receive_message_response_one" />

@@ -174,7 +174,7 @@ class TestMessageService(BaseTest):
         assert message_instance_receiver_one is not None
         assert message_instance_receiver_two is not None
 
-        # Cause a currelation event
+        # Cause a correlation event
         MessageService.correlate_all_message_instances()
         # We have to run it a second time because instances are firing
         # more messages that need to be picked up.

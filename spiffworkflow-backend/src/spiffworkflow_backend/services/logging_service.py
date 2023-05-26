@@ -146,7 +146,7 @@ def setup_logger(app: Flask) -> None:
                 " SPIFFWORKFLOW_BACKEND_LOGGERS_TO_USE."
             )
 
-    loggers_to_exclude_from_debug = []
+    loggers_to_exclude_from_debug = ['apscheduler']
 
     if "sqlalchemy" not in garbage_loggers_to_exclude:
         loggers_to_exclude_from_debug.append("sqlalchemy")

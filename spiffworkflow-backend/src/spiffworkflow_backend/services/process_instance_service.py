@@ -149,7 +149,6 @@ class ProcessInstanceService:
 
     @classmethod
     def do_waiting(cls, status_value: str) -> None:
-        """Do_waiting."""
         run_at_in_seconds_threshold = round(time.time())
         process_instance_ids_to_check = ProcessInstanceQueueService.peek_many(
             status_value, run_at_in_seconds_threshold
@@ -164,7 +163,7 @@ class ProcessInstanceService:
         )
         execution_strategy_name = current_app.config["SPIFFWORKFLOW_BACKEND_ENGINE_STEP_DEFAULT_STRATEGY_BACKGROUND"]
         for process_instance in records:
-            current_app.logger.info(f"Processing process_instance {process_instance.id}")
+            current_app.logger.debug(f"Processing process_instance {process_instance.id} with status {process_instance.status}")
             try:
                 cls.run_process_instance_with_processor(
                     process_instance, status_value=status_value, execution_strategy_name=execution_strategy_name
@@ -207,8 +206,6 @@ class ProcessInstanceService:
 
         If requested, and possible, next_task is set to the current_task.
         """
-        # navigation = processor.bpmn_process_instance.get_deep_nav_list()
-        # ProcessInstanceService.update_navigation(navigation, processor)
         ProcessModelService.get_process_model(processor.process_model_identifier)
         process_instance_api = ProcessInstanceApi(
             id=processor.get_process_instance_id(),

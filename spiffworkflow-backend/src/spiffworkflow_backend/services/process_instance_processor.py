@@ -999,11 +999,7 @@ class ProcessInstanceProcessor:
     def save(self) -> None:
         """Saves the current state of this processor to the database."""
         self.process_instance_model.spiff_serializer_version = self.SERIALIZER_VERSION
-
         self.process_instance_model.status = self.get_status().value
-        current_app.logger.debug(
-            f"the_status: {self.process_instance_model.status} for instance {self.process_instance_model.id}"
-        )
 
         if self.process_instance_model.start_in_seconds is None:
             self.process_instance_model.start_in_seconds = round(time.time())
@@ -1313,7 +1309,6 @@ class ProcessInstanceProcessor:
 
     @staticmethod
     def status_of(bpmn_process_instance: BpmnWorkflow) -> ProcessInstanceStatus:
-        """Status_of."""
         if bpmn_process_instance.is_completed():
             return ProcessInstanceStatus.complete
         user_tasks = bpmn_process_instance.get_ready_user_tasks()
@@ -1333,9 +1328,7 @@ class ProcessInstanceProcessor:
             return ProcessInstanceStatus.waiting
 
     def get_status(self) -> ProcessInstanceStatus:
-        """Get_status."""
         the_status = self.status_of(self.bpmn_process_instance)
-        # current_app.logger.debug(f"the_status: {the_status} for instance {self.process_instance_model.id}")
         return the_status
 
     def element_unit_specs_loader(self, process_id: str, element_id: str) -> Optional[Dict[str, Any]]:

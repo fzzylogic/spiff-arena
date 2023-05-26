@@ -96,15 +96,19 @@ class MessageInstanceModel(SpiffworkflowBaseDBModel):
             return False
         if isinstance(self.correlation_keys, dict) and self.correlation_keys == other.correlation_keys:
             # We know we have a match, and we can just return if we don't have to figure out the key
+            import pdb; pdb.set_trace()
             return True
 
         if self.correlation_keys == {}:
+            import pdb; pdb.set_trace()
             # Then there is nothing more to match on -- we accept any message with the given name.
             return True
 
         # Loop over the receives' correlation keys - if any of the keys fully match, then we match.
         for expected_values in self.correlation_keys.values():
             if self.payload_matches_expected_values(other.payload, expected_values, expression_engine):
+                current_app.config['APP_SCHEDULER'].pause()
+                import pdb; pdb.set_trace()
                 return True
         return False
 
