@@ -2,7 +2,6 @@
 from flask import g
 from SpiffWorkflow.bpmn.serializer.helpers.spec import BpmnSpecConverter
 from SpiffWorkflow.bpmn.specs.data_spec import BpmnDataStoreSpecification
-
 from spiffworkflow_backend.services.secret_service import SecretService
 from spiffworkflow_backend.services.user_service import UserService
 
