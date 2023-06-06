@@ -1,23 +1,43 @@
+# Copyright (C) 2023 Sartography
+#
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 3.0 of the License, or (at your option) any later version.
+#
+# SpiffWorkflow is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301  USA
+
 import json
 import gzip
 from copy import deepcopy
 from uuid import UUID
 
-from ..workflow import BpmnMessage, BpmnWorkflow
-from ..specs.SubWorkflowTask import SubWorkflowTask
-from ...task import Task
+from SpiffWorkflow.task import Task
+from SpiffWorkflow.bpmn.workflow import BpmnMessage, BpmnWorkflow
+from SpiffWorkflow.bpmn.specs.mixins.subworkflow_task import SubWorkflowTask
 
-from .version_migration import MIGRATIONS
+from .migration.version_migration import MIGRATIONS
 from .helpers.registry import DefaultRegistry
 from .helpers.dictionary import DictionaryConverter
 
-from .process_spec import BpmnProcessSpecConverter, BpmnDataObjectConverter
+from .process_spec import BpmnProcessSpecConverter
+from .data_spec import BpmnDataObjectConverter, TaskDataReferenceConverter, IOSpecificationConverter
 from .task_spec import DEFAULT_TASK_SPEC_CONVERTER_CLASSES
 from .event_definition import DEFAULT_EVENT_CONVERTERS
 
 DEFAULT_SPEC_CONFIG = {
     'process': BpmnProcessSpecConverter,
-    'data_specs': [BpmnDataObjectConverter],
+    'data_specs': [IOSpecificationConverter, BpmnDataObjectConverter, TaskDataReferenceConverter],
     'task_specs': DEFAULT_TASK_SPEC_CONVERTER_CLASSES,
     'event_definitions': DEFAULT_EVENT_CONVERTERS,
 }
@@ -31,7 +51,7 @@ class BpmnWorkflowSerializer:
     The goal is to provide modular serialization capabilities.
 
     You'll need to configure a Workflow Spec Converter with converters for any task, data, or event types
-    present in your workflows. 
+    present in your workflows.
 
     If you have implemented any custom specs, you'll need to write a converter to handle them and
     replace the converter from the default confiuration with your own.
@@ -62,13 +82,13 @@ class BpmnWorkflowSerializer:
         """
         This method can be used to create a spec converter that uses custom specs.
 
-        The task specs may contain arbitrary data, though none of the default task specs use it.  We don't 
-        recommend that you do this, as we may disallow it in the future.  However, if you have task spec data, 
+        The task specs may contain arbitrary data, though none of the default task specs use it.  We don't
+        recommend that you do this, as we may disallow it in the future.  However, if you have task spec data,
         then you'll also need to make sure it can be serialized.
 
         The workflow spec serializer is based on the `DictionaryConverter` in the `helpers` package.  You can
-        create one of your own, add custom data serializtion to that and pass that in as the `registry`.  The 
-        conversion classes in the spec_config will be added this "registry" and any classes with entries there 
+        create one of your own, add custom data serializtion to that and pass that in as the `registry`.  The
+        conversion classes in the spec_config will be added this "registry" and any classes with entries there
         will be serialized/deserialized.
 
         See the documentation for `helpers.spec.BpmnSpecConverter` for more information about what's going
@@ -84,7 +104,7 @@ class BpmnWorkflowSerializer:
             cls(spec_converter)
         return spec_converter
 
-    def __init__(self, spec_converter=None, data_converter=None, wf_class=None, version=VERSION, 
+    def __init__(self, spec_converter=None, data_converter=None, wf_class=None, version=VERSION,
                  json_encoder_cls=DEFAULT_JSON_ENCODER_CLS, json_decoder_cls=DEFAULT_JSON_DECODER_CLS):
         """Intializes a Workflow Serializer with the given Workflow, Task and Data Converters.
 
@@ -133,7 +153,7 @@ class BpmnWorkflowSerializer:
             dct = self.__get_dict(serialization, use_gzip)
             if self.VERSION_KEY in dct:
                 return dct[self.VERSION_KEY]
-        except:  # Don't bail out trying to get a version, just return none.
+        except Exception:  # Don't bail out trying to get a version, just return none.
             return None
 
     def workflow_to_dict(self, workflow):
@@ -155,6 +175,8 @@ class BpmnWorkflowSerializer:
             (str(task_id), self.process_to_dict(sp)) for task_id, sp in workflow.subprocesses.items()
         )
         dct['bpmn_messages'] = [self.message_to_dict(msg) for msg in workflow.bpmn_messages]
+
+        dct['correlations'] = workflow.correlations
         return dct
 
     def workflow_from_dict(self, dct):
@@ -184,6 +206,8 @@ class BpmnWorkflowSerializer:
 
         # Restore any unretrieve messages
         workflow.bpmn_messages = [ self.message_from_dict(msg) for msg in dct.get('bpmn_messages', []) ]
+
+        workflow.correlations = dct_copy.pop('correlations', {})
 
         # Restore the remainder of the workflow
         workflow.data = self.data_converter.restore(dct_copy.pop('data'))
@@ -241,16 +265,24 @@ class BpmnWorkflowSerializer:
 
         if isinstance(task_spec, SubWorkflowTask) and task_id in top_dct.get('subprocesses', {}):
             subprocess_spec = top.subprocess_specs[task_spec.spec]
-            subprocess = self.wf_class(subprocess_spec, {}, name=task_spec.name, parent=process)
+            subprocess = self.wf_class(subprocess_spec, {}, name=task_spec.name, parent=process, deserializing=True)
             subprocess_dct = top_dct['subprocesses'].get(task_id, {})
-            subprocess.data = self.data_converter.restore(subprocess_dct.pop('data'))
+            subprocess.spec.data_objects.update(process.spec.data_objects)
+            if len(subprocess.spec.data_objects) > 0:
+                subprocess.data = process.data
+            else:
+                subprocess.data = self.data_converter.restore(subprocess_dct.pop('data'))
             subprocess.success = subprocess_dct.pop('success')
             subprocess.task_tree = self.task_tree_from_dict(subprocess_dct, subprocess_dct.pop('root'), None, subprocess, top, top_dct)
             subprocess.completed_event.connect(task_spec._on_subworkflow_completed, task)
             top_level_workflow.subprocesses[task.id] = subprocess
 
-        for child in [ process_dct['tasks'][c] for c in task_dict['children'] ]:
-            self.task_tree_from_dict(process_dct, child['id'], task, process, top, top_dct)
+        for child_task_id in task_dict['children']:
+            if child_task_id in process_dct['tasks']:
+                process_dct['tasks'][child_task_id]
+                self.task_tree_from_dict(process_dct, child_task_id, task, process, top, top_dct)
+            else:
+                raise ValueError(f"Task {task_id} ({task_spec.name}) has child {child_task_id}, but no such task exists")
 
         return task
 

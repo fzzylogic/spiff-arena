@@ -1,9 +1,9 @@
-"""Test_authentication."""
 import base64
 
 import jwt
 from flask import Flask
 from flask.testing import FlaskClient
+
 from tests.spiffworkflow_backend.helpers.base_test import BaseTest
 
 
@@ -24,9 +24,7 @@ class TestFlaskOpenId(BaseTest):
         response = client.get("/openid/.well-known/openid-configuration")
         discovered_urls = response.json
         assert "http://localhost/openid" == discovered_urls["issuer"]
-        assert (
-            "http://localhost/openid/auth" == discovered_urls["authorization_endpoint"]
-        )
+        assert "http://localhost/openid/auth" == discovered_urls["authorization_endpoint"]
         assert "http://localhost/openid/token" == discovered_urls["token_endpoint"]
 
     def test_get_login_page(
@@ -47,7 +45,6 @@ class TestFlaskOpenId(BaseTest):
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
     ) -> None:
-        """Test_get_token."""
         code = "testadmin1:1234123412341234"
 
         """It should be possible to get a token."""
@@ -70,8 +67,6 @@ class TestFlaskOpenId(BaseTest):
         assert "id_token" in response.json
         assert "refresh_token" in response.json
 
-        decoded_token = jwt.decode(
-            response.json["id_token"], options={"verify_signature": False}
-        )
+        decoded_token = jwt.decode(response.json["id_token"], options={"verify_signature": False})
         assert "iss" in decoded_token
         assert "email" in decoded_token

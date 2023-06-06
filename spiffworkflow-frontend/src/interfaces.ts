@@ -21,10 +21,58 @@ export interface RecentProcessModel {
   processModelDisplayName: string;
 }
 
-export interface ProcessInstanceTask {
-  id: number;
-  task_id: string;
+export interface TaskPropertiesJson {
+  parent: string;
+  last_state_change: number;
+}
 
+export interface TaskDefinitionPropertiesJson {
+  spec: string;
+}
+
+export interface EventDefinition {
+  typename: string;
+  payload: any;
+  event_definitions: [EventDefinition];
+
+  message_var?: string;
+}
+
+export interface SignalButton {
+  label: string;
+  event: EventDefinition;
+}
+
+// TODO: merge with ProcessInstanceTask
+export interface Task {
+  id: number;
+  guid: string;
+  process_instance_id: number;
+  bpmn_identifier: string;
+  bpmn_name?: string;
+  bpmn_process_direct_parent_guid: string;
+  bpmn_process_definition_identifier: string;
+  data: any;
+  state: string;
+  typename: string;
+  properties_json: TaskPropertiesJson;
+  task_definition_properties_json: TaskDefinitionPropertiesJson;
+
+  event_definition?: EventDefinition;
+
+  process_model_display_name: string;
+  process_model_identifier: string;
+  name_for_display: string;
+  can_complete: boolean;
+  form_schema: any;
+  form_ui_schema: any;
+  signal_buttons: SignalButton[];
+}
+
+export interface ProcessInstanceTask {
+  id: string;
+  task_id: string;
+  can_complete: boolean;
   calling_subprocess_task_id: string;
   created_at_in_seconds: number;
   current_user_is_potential_owner: number;
@@ -46,9 +94,9 @@ export interface ProcessInstanceTask {
   type: string;
   updated_at_in_seconds: number;
 
-  task_spiff_step?: number;
   potential_owner_usernames?: string;
   assigned_user_group_identifier?: string;
+  error_message?: string;
 }
 
 export interface ProcessReference {
@@ -64,6 +112,8 @@ export interface ProcessReference {
   is_primary: boolean;
 }
 
+export type ObjectWithStringKeysAndValues = { [key: string]: string };
+
 export interface ProcessFile {
   content_type: string;
   last_modified: string;
@@ -73,6 +123,7 @@ export interface ProcessFile {
   size: number;
   type: string;
   file_contents?: string;
+  file_contents_hash?: string;
 }
 
 export interface ProcessInstanceMetadata {
@@ -90,13 +141,18 @@ export interface ProcessInstance {
   end_in_seconds: number | null;
   process_initiator_username: string;
   bpmn_xml_file_contents?: string;
-  spiff_step?: number;
   created_at_in_seconds: number;
   updated_at_in_seconds: number;
   bpmn_version_control_identifier: string;
   bpmn_version_control_type: string;
   process_metadata?: ProcessInstanceMetadata[];
   process_model_with_diagram_identifier?: string;
+
+  // from tasks
+  potential_owner_usernames?: string;
+  task_id?: string;
+  task_updated_at_in_seconds?: number;
+  waiting_for?: string;
 }
 
 export interface MessageCorrelationProperties {
@@ -112,17 +168,19 @@ export interface MessageInstance {
   process_model_identifier: string;
   process_model_display_name: string;
   process_instance_id: number;
-  message_identifier: string;
+  name: string;
   message_type: string;
   failure_cause: string;
   status: string;
   created_at_in_seconds: number;
   message_correlations?: MessageCorrelations;
+  correlation_keys: any;
 }
 
 export interface ReportFilter {
   field_name: string;
-  field_value: string;
+  // using any here so we can use this as a string and boolean
+  field_value: any;
   operator?: string;
 }
 
@@ -165,11 +223,13 @@ export interface ProcessModel {
   description: string;
   display_name: string;
   primary_file_name: string;
+  primary_process_id: string;
   files: ProcessFile[];
   parent_groups?: ProcessGroupLite[];
   metadata_extraction_paths?: MetadataExtractionPath[];
   fault_or_suspend_on_exception?: string;
   exception_notification_addresses?: string[];
+  bpmn_version_control_identifier?: string;
 }
 
 export interface ProcessGroup {
@@ -194,12 +254,16 @@ export type HotCrumbItem = HotCrumbItemArray | HotCrumbItemObject;
 
 export interface ErrorForDisplay {
   message: string;
+
+  messageClassName?: string;
   sentry_link?: string;
   task_name?: string;
   task_id?: string;
   line_number?: number;
+  error_line?: string;
   file_name?: string;
-  task_trace?: [string];
+  task_trace?: string[];
+  stacktrace?: string[];
 }
 
 export interface AuthenticationParam {
@@ -255,4 +319,73 @@ export interface JsonSchemaForm {
   name: string;
   process_model_id: string;
   required: string[];
+}
+
+export interface ProcessInstanceEventErrorDetail {
+  id: number;
+  message: string;
+  stacktrace: string[];
+  task_line_contents?: string;
+  task_line_number?: number;
+  task_offset?: number;
+  task_trace?: string[];
+}
+
+export interface ProcessInstanceLogEntry {
+  bpmn_process_definition_identifier: string;
+  bpmn_process_definition_name: string;
+  bpmn_task_type: string;
+  event_type: string;
+  spiff_task_guid: string;
+  task_definition_identifier: string;
+  task_guid: string;
+  timestamp: number;
+  id: number;
+  process_instance_id: number;
+
+  task_definition_name?: string;
+  user_id?: number;
+  username?: string;
+}
+
+export interface ProcessModelCaller {
+  display_name: string;
+  process_model_id: string;
+}
+
+export interface UserGroup {}
+
+type InterstitialPageResponseType =
+  | 'task_update'
+  | 'error'
+  | 'unrunnable_instance';
+
+export interface InterstitialPageResponse {
+  type: InterstitialPageResponseType;
+  error?: any;
+  task?: ProcessInstanceTask;
+  process_instance?: ProcessInstance;
+}
+
+export interface TestCaseErrorDetails {
+  error_messages: string[];
+  stacktrace?: string[];
+  task_bpmn_identifier?: string;
+  task_bpmn_name?: string;
+  task_line_contents?: string;
+  task_line_number?: number;
+  task_trace?: string[];
+}
+
+export interface TestCaseResult {
+  bpmn_file: string;
+  passed: boolean;
+  test_case_identifier: string;
+  test_case_error_details?: TestCaseErrorDetails;
+}
+
+export interface TestCaseResults {
+  all_passed: boolean;
+  failing: TestCaseResult[];
+  passing: TestCaseResult[];
 }

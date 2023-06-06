@@ -8,7 +8,6 @@ import ProcessGroupEdit from './ProcessGroupEdit';
 import ProcessModelShow from './ProcessModelShow';
 import ProcessModelEditDiagram from './ProcessModelEditDiagram';
 import ProcessInstanceList from './ProcessInstanceList';
-import ProcessInstanceReportShow from './ProcessInstanceReportShow';
 import ProcessModelNew from './ProcessModelNew';
 import ProcessModelEdit from './ProcessModelEdit';
 import ProcessInstanceShow from './ProcessInstanceShow';
@@ -23,6 +22,7 @@ import Configuration from './Configuration';
 import JsonSchemaFormBuilder from './JsonSchemaFormBuilder';
 import ProcessModelNewExperimental from './ProcessModelNewExperimental';
 import ProcessInstanceFindById from './ProcessInstanceFindById';
+import ProcessInterstitialPage from './ProcessInterstitialPage';
 
 export default function AdminRoutes() {
   const location = useLocation();
@@ -73,24 +73,28 @@ export default function AdminRoutes() {
           element={<ProcessInstanceShow variant="for-me" />}
         />
         <Route
-          path="process-instances/for-me/:process_model_id/:process_instance_id/:spiff_step"
+          path="process-instances/for-me/:process_model_id/:process_instance_id/:to_task_guid"
           element={<ProcessInstanceShow variant="for-me" />}
+        />
+        <Route
+          path="process-instances/for-me/:process_model_id/:process_instance_id/interstitial"
+          element={<ProcessInterstitialPage variant="for-me" />}
+        />
+        <Route
+          path="process-instances/:process_model_id/:process_instance_id/interstitial"
+          element={<ProcessInterstitialPage variant="all" />}
         />
         <Route
           path="process-instances/:process_model_id/:process_instance_id"
           element={<ProcessInstanceShow variant="all" />}
         />
         <Route
-          path="process-instances/:process_model_id/:process_instance_id/:spiff_step"
+          path="process-instances/:process_model_id/:process_instance_id/:to_task_guid"
           element={<ProcessInstanceShow variant="all" />}
         />
         <Route
           path="process-instances/reports"
           element={<ProcessInstanceReportList />}
-        />
-        <Route
-          path="process-instances/reports/:report_identifier"
-          element={<ProcessInstanceReportShow />}
         />
         <Route
           path="process-instances/reports/new"
@@ -110,7 +114,11 @@ export default function AdminRoutes() {
         />
         <Route
           path="logs/:process_model_id/:process_instance_id"
-          element={<ProcessInstanceLogList />}
+          element={<ProcessInstanceLogList variant="all" />}
+        />
+        <Route
+          path="logs/for-me/:process_model_id/:process_instance_id"
+          element={<ProcessInstanceLogList variant="for-me" />}
         />
         <Route
           path="process-instances"

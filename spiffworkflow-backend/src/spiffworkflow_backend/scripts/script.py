@@ -1,19 +1,16 @@
-"""Script."""
 from __future__ import annotations
 
 import importlib
 import os
 import pkgutil
 from abc import abstractmethod
+from collections.abc import Callable
 from typing import Any
-from typing import Callable
 
 from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModel
 from spiffworkflow_backend.models.process_instance import ProcessInstanceNotFoundError
-from spiffworkflow_backend.models.script_attributes_context import (
-    ScriptAttributesContext,
-)
+from spiffworkflow_backend.models.script_attributes_context import ScriptAttributesContext
 from spiffworkflow_backend.services.authorization_service import AuthorizationService
 
 # Generally speaking, having some global in a flask app is TERRIBLE.
@@ -23,7 +20,15 @@ SCRIPT_SUB_CLASSES = None
 
 
 class ScriptUnauthorizedForUserError(Exception):
-    """ScriptUnauthorizedForUserError."""
+    pass
+
+
+class ProcessInstanceIdMissingError(Exception):
+    pass
+
+
+class ProcessModelIdentifierMissingError(Exception):
+    pass
 
 
 class Script:
@@ -31,7 +36,6 @@ class Script:
 
     @abstractmethod
     def get_description(self) -> str:
-        """Get_description."""
         raise ApiError("invalid_script", "This script does not supply a description.")
 
     @abstractmethod
@@ -41,12 +45,26 @@ class Script:
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        """Run."""
         raise ApiError(
             "invalid_script",
-            "This is an internal error. The script you are trying to execute '%s' "
-            % self.__class__.__name__
+            "This is an internal error. The script you are trying to execute '%s' " % self.__class__.__name__
             + "does not properly implement the run function.",
+        )
+
+    def get_proces_instance_id_is_missing_error(self, script_name: str) -> ProcessInstanceIdMissingError:
+        """Return the error so we can raise it from the script and mypy will be happy."""
+        raise ProcessInstanceIdMissingError(
+            "The process instance id was not given to script"
+            f" '{script_name}'. This script needs to be run from"
+            " within the context of a process instance."
+        )
+
+    def get_proces_model_identifier_is_missing_error(self, script_name: str) -> ProcessModelIdentifierMissingError:
+        """Return the error so we can raise it from the script and mypy will be happy."""
+        return ProcessModelIdentifierMissingError(
+            "The process model identifier was not given to script"
+            f" '{script_name}'. This script needs to be run from"
+            " within the context of a process model."
         )
 
     @staticmethod
@@ -88,7 +106,6 @@ class Script:
             instance = subclass()
 
             def check_script_permission() -> None:
-                """Check_script_permission."""
                 if subclass.requires_privileged_permissions():
                     script_function_name = get_script_function_name(subclass)
                     uri = f"/can-run-privileged-script/{script_function_name}"
@@ -112,7 +129,6 @@ class Script:
                         )
 
             def run_script_if_allowed(*ar: Any, **kw: Any) -> Any:
-                """Run_script_if_allowed."""
                 check_script_permission()
                 return subclass.run(
                     instance,
@@ -124,7 +140,6 @@ class Script:
             return run_script_if_allowed
 
         def get_script_function_name(subclass: type[Script]) -> str:
-            """Get_script_function_name."""
             return subclass.__module__.split(".")[-1]
 
         execlist = {}
@@ -138,16 +153,14 @@ class Script:
 
     @classmethod
     def get_all_subclasses(cls) -> list[type[Script]]:
-        """Get_all_subclasses."""
         # This is expensive to generate, never changes after we load up.
-        global SCRIPT_SUB_CLASSES
+        global SCRIPT_SUB_CLASSES  # noqa: PLW0603, allow global for performance
         if not SCRIPT_SUB_CLASSES:
             SCRIPT_SUB_CLASSES = Script._get_all_subclasses(Script)
         return SCRIPT_SUB_CLASSES
 
     @staticmethod
     def _get_all_subclasses(script_class: Any) -> list[type[Script]]:
-        """_get_all_subclasses."""
         # hackish mess to make sure we have all the modules loaded for the scripts
         pkg_dir = os.path.dirname(__file__)
         for _module_loader, name, _ispkg in pkgutil.iter_modules([pkg_dir]):

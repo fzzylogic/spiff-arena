@@ -2,10 +2,8 @@
 import json
 import os
 import re
+from hashlib import sha256
 from typing import Any
-from typing import Dict
-from typing import Optional
-from typing import Union
 
 import connexion  # type: ignore
 import flask.wrappers
@@ -18,40 +16,29 @@ from werkzeug.datastructures import FileStorage
 
 from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.interfaces import IdToProcessGroupMapping
-from spiffworkflow_backend.models.file import FileSchema
 from spiffworkflow_backend.models.process_group import ProcessGroup
-from spiffworkflow_backend.models.process_instance_report import (
-    ProcessInstanceReportModel,
-)
+from spiffworkflow_backend.models.process_instance_report import ProcessInstanceReportModel
 from spiffworkflow_backend.models.process_model import ProcessModelInfo
 from spiffworkflow_backend.models.process_model import ProcessModelInfoSchema
 from spiffworkflow_backend.routes.process_api_blueprint import _commit_and_push_to_git
 from spiffworkflow_backend.routes.process_api_blueprint import _get_process_model
-from spiffworkflow_backend.routes.process_api_blueprint import (
-    _un_modify_modified_process_model_id,
-)
+from spiffworkflow_backend.routes.process_api_blueprint import _un_modify_modified_process_model_id
+from spiffworkflow_backend.services.file_system_service import FileSystemService
+from spiffworkflow_backend.services.git_service import GitCommandError
 from spiffworkflow_backend.services.git_service import GitService
 from spiffworkflow_backend.services.git_service import MissingGitConfigsError
-from spiffworkflow_backend.services.process_instance_report_service import (
-    ProcessInstanceReportNotFoundError,
-)
-from spiffworkflow_backend.services.process_instance_report_service import (
-    ProcessInstanceReportService,
-)
+from spiffworkflow_backend.services.process_instance_report_service import ProcessInstanceReportNotFoundError
+from spiffworkflow_backend.services.process_instance_report_service import ProcessInstanceReportService
 from spiffworkflow_backend.services.process_model_service import ProcessModelService
-from spiffworkflow_backend.services.process_model_service import (
-    ProcessModelWithInstancesNotDeletableError,
-)
-from spiffworkflow_backend.services.spec_file_service import (
-    ProcessModelFileInvalidError,
-)
+from spiffworkflow_backend.services.process_model_service import ProcessModelWithInstancesNotDeletableError
+from spiffworkflow_backend.services.process_model_test_runner_service import ProcessModelTestRunner
+from spiffworkflow_backend.services.spec_file_service import ProcessModelFileInvalidError
 from spiffworkflow_backend.services.spec_file_service import SpecFileService
 
 
 def process_model_create(
-    modified_process_group_id: str, body: Dict[str, Union[str, bool, int, None, list]]
+    modified_process_group_id: str, body: dict[str, str | bool | int | None | list]
 ) -> flask.wrappers.Response:
-    """Process_model_create."""
     body_include_list = [
         "id",
         "display_name",
@@ -62,11 +49,7 @@ def process_model_create(
         "fault_or_suspend_on_exception",
         "exception_notification_addresses",
     ]
-    body_filtered = {
-        include_item: body[include_item]
-        for include_item in body_include_list
-        if include_item in body
-    }
+    body_filtered = {include_item: body[include_item] for include_item in body_include_list if include_item in body}
 
     _get_process_group_from_modified_identifier(modified_process_group_id)
 
@@ -81,25 +64,19 @@ def process_model_create(
     if ProcessModelService.is_process_model_identifier(process_model_info.id):
         raise ApiError(
             error_code="process_model_with_id_already_exists",
-            message=(
-                f"Process Model with given id already exists: {process_model_info.id}"
-            ),
+            message=f"Process Model with given id already exists: {process_model_info.id}",
             status_code=400,
         )
 
     if ProcessModelService.is_process_group_identifier(process_model_info.id):
         raise ApiError(
             error_code="process_group_with_id_already_exists",
-            message=(
-                f"Process Group with given id already exists: {process_model_info.id}"
-            ),
+            message=f"Process Group with given id already exists: {process_model_info.id}",
             status_code=400,
         )
 
     ProcessModelService.add_process_model(process_model_info)
-    _commit_and_push_to_git(
-        f"User: {g.user.username} created process model {process_model_info.id}"
-    )
+    _commit_and_push_to_git(f"User: {g.user.username} created process model {process_model_info.id}")
     return Response(
         json.dumps(ProcessModelInfoSchema().dump(process_model_info)),
         status=201,
@@ -110,10 +87,9 @@ def process_model_create(
 def process_model_delete(
     modified_process_model_identifier: str,
 ) -> flask.wrappers.Response:
-    """Process_model_delete."""
     process_model_identifier = modified_process_model_identifier.replace(":", "/")
     try:
-        ProcessModelService().process_model_delete(process_model_identifier)
+        ProcessModelService.process_model_delete(process_model_identifier)
     except ProcessModelWithInstancesNotDeletableError as exception:
         raise ApiError(
             error_code="existing_instances",
@@ -121,17 +97,14 @@ def process_model_delete(
             status_code=400,
         ) from exception
 
-    _commit_and_push_to_git(
-        f"User: {g.user.username} deleted process model {process_model_identifier}"
-    )
+    _commit_and_push_to_git(f"User: {g.user.username} deleted process model {process_model_identifier}")
     return Response(json.dumps({"ok": True}), status=200, mimetype="application/json")
 
 
 def process_model_update(
     modified_process_model_identifier: str,
-    body: Dict[str, Union[str, bool, int, None, list]],
+    body: dict[str, str | bool | int | None | list],
 ) -> Any:
-    """Process_model_update."""
     process_model_identifier = modified_process_model_identifier.replace(":", "/")
     body_include_list = [
         "display_name",
@@ -142,11 +115,7 @@ def process_model_update(
         "fault_or_suspend_on_exception",
         "exception_notification_addresses",
     ]
-    body_filtered = {
-        include_item: body[include_item]
-        for include_item in body_include_list
-        if include_item in body
-    }
+    body_filtered = {include_item: body[include_item] for include_item in body_include_list if include_item in body}
 
     process_model = _get_process_model(process_model_identifier)
 
@@ -155,10 +124,7 @@ def process_model_update(
     # All we really need this for is to get the process id from a bpmn file so maybe that could
     #   all be moved to FileSystemService.
     update_primary_bpmn_file = False
-    if (
-        "primary_file_name" in body_filtered
-        and "primary_process_id" not in body_filtered
-    ):
+    if "primary_file_name" in body_filtered and "primary_process_id" not in body_filtered:
         if process_model.primary_file_name != body_filtered["primary_file_name"]:
             update_primary_bpmn_file = True
 
@@ -166,23 +132,14 @@ def process_model_update(
 
     # update the file to ensure we get the correct process id if the primary file changed.
     if update_primary_bpmn_file and process_model.primary_file_name:
-        primary_file_contents = SpecFileService.get_data(
-            process_model, process_model.primary_file_name
-        )
-        SpecFileService.update_file(
-            process_model, process_model.primary_file_name, primary_file_contents
-        )
+        primary_file_contents = SpecFileService.get_data(process_model, process_model.primary_file_name)
+        SpecFileService.update_file(process_model, process_model.primary_file_name, primary_file_contents)
 
-    _commit_and_push_to_git(
-        f"User: {g.user.username} updated process model {process_model_identifier}"
-    )
+    _commit_and_push_to_git(f"User: {g.user.username} updated process model {process_model_identifier}")
     return ProcessModelInfoSchema().dump(process_model)
 
 
-def process_model_show(
-    modified_process_model_identifier: str, include_file_references: bool = False
-) -> Any:
-    """Process_model_show."""
+def process_model_show(modified_process_model_identifier: str, include_file_references: bool = False) -> Any:
     process_model_identifier = modified_process_model_identifier.replace(":", "/")
     process_model = _get_process_model(process_model_identifier)
     files = sorted(
@@ -193,83 +150,65 @@ def process_model_show(
 
     if include_file_references:
         for file in process_model.files:
-            file.references = SpecFileService.get_references_for_file(
-                file, process_model
-            )
+            file.references = SpecFileService.get_references_for_file(file, process_model)
 
-    process_model.parent_groups = ProcessModelService.get_parent_group_array(
-        process_model.id
-    )
+    process_model.parent_groups = ProcessModelService.get_parent_group_array(process_model.id)
+    try:
+        current_git_revision = GitService.get_current_revision()
+    except GitCommandError:
+        current_git_revision = ""
+
+    process_model.bpmn_version_control_identifier = current_git_revision
     return make_response(jsonify(process_model), 200)
 
 
-def process_model_move(
-    modified_process_model_identifier: str, new_location: str
-) -> flask.wrappers.Response:
-    """Process_model_move."""
-    original_process_model_id = _un_modify_modified_process_model_id(
-        modified_process_model_identifier
-    )
-    new_process_model = ProcessModelService().process_model_move(
-        original_process_model_id, new_location
-    )
+def process_model_move(modified_process_model_identifier: str, new_location: str) -> flask.wrappers.Response:
+    original_process_model_id = _un_modify_modified_process_model_id(modified_process_model_identifier)
+    new_process_model = ProcessModelService.process_model_move(original_process_model_id, new_location)
     _commit_and_push_to_git(
-        f"User: {g.user.username} moved process model {original_process_model_id} to"
-        f" {new_process_model.id}"
+        f"User: {g.user.username} moved process model {original_process_model_id} to {new_process_model.id}"
     )
     return make_response(jsonify(new_process_model), 200)
 
 
 def process_model_publish(
-    modified_process_model_identifier: str, branch_to_update: Optional[str] = None
+    modified_process_model_identifier: str, branch_to_update: str | None = None
 ) -> flask.wrappers.Response:
-    """Process_model_publish."""
     if branch_to_update is None:
-        branch_to_update = current_app.config[
-            "SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_TARGET_BRANCH"
-        ]
+        branch_to_update = current_app.config["SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_TARGET_BRANCH"]
     if branch_to_update is None:
         raise MissingGitConfigsError(
             "Missing config for SPIFFWORKFLOW_BACKEND_GIT_PUBLISH_TARGET_BRANCH. "
             "This is required for publishing process models"
         )
-    process_model_identifier = _un_modify_modified_process_model_id(
-        modified_process_model_identifier
-    )
+    process_model_identifier = _un_modify_modified_process_model_id(modified_process_model_identifier)
     pr_url = GitService().publish(process_model_identifier, branch_to_update)
     data = {"ok": True, "pr_url": pr_url}
     return Response(json.dumps(data), status=200, mimetype="application/json")
 
 
 def process_model_list(
-    process_group_identifier: Optional[str] = None,
-    recursive: Optional[bool] = False,
-    filter_runnable_by_user: Optional[bool] = False,
-    include_parent_groups: Optional[bool] = False,
+    process_group_identifier: str | None = None,
+    recursive: bool | None = False,
+    filter_runnable_by_user: bool | None = False,
+    include_parent_groups: bool | None = False,
     page: int = 1,
     per_page: int = 100,
 ) -> flask.wrappers.Response:
-    """Process model list!"""
-    process_models = ProcessModelService.get_process_models(
+    process_models = ProcessModelService.get_process_models_for_api(
         process_group_id=process_group_identifier,
         recursive=recursive,
         filter_runnable_by_user=filter_runnable_by_user,
     )
-    process_models_to_return = ProcessModelService().get_batch(
-        process_models, page=page, per_page=per_page
-    )
+    process_models_to_return = ProcessModelService.get_batch(process_models, page=page, per_page=per_page)
 
     if include_parent_groups:
         process_group_cache = IdToProcessGroupMapping({})
         for process_model in process_models_to_return:
-            parent_group_lites_with_cache = (
-                ProcessModelService.get_parent_group_array_and_cache_it(
-                    process_model.id, process_group_cache
-                )
+            parent_group_lites_with_cache = ProcessModelService.get_parent_group_array_and_cache_it(
+                process_model.id, process_group_cache
             )
-            process_model.parent_groups = parent_group_lites_with_cache[
-                "process_groups"
-            ]
+            process_model.parent_groups = parent_group_lites_with_cache["process_groups"]
 
     pages = len(process_models) // per_page
     remainder = len(process_models) % per_page
@@ -287,19 +226,15 @@ def process_model_list(
 
 
 def process_model_file_update(
-    modified_process_model_identifier: str, file_name: str
+    modified_process_model_identifier: str, file_name: str, file_contents_hash: str
 ) -> flask.wrappers.Response:
-    """Process_model_file_update."""
     message = f"User: {g.user.username} clicked save for"
     return _create_or_update_process_model_file(
-        modified_process_model_identifier, message, 200
+        modified_process_model_identifier, message, 200, file_contents_hash=file_contents_hash
     )
 
 
-def process_model_file_delete(
-    modified_process_model_identifier: str, file_name: str
-) -> flask.wrappers.Response:
-    """Process_model_file_delete."""
+def process_model_file_delete(modified_process_model_identifier: str, file_name: str) -> flask.wrappers.Response:
     process_model_identifier = modified_process_model_identifier.replace(":", "/")
     process_model = _get_process_model(process_model_identifier)
 
@@ -326,8 +261,7 @@ def process_model_file_delete(
         ) from exception
 
     _commit_and_push_to_git(
-        f"User: {g.user.username} deleted process model file"
-        f" {process_model_identifier}/{file_name}"
+        f"User: {g.user.username} deleted process model file {process_model_identifier}/{file_name}"
     )
     return Response(json.dumps({"ok": True}), status=200, mimetype="application/json")
 
@@ -335,35 +269,51 @@ def process_model_file_delete(
 def process_model_file_create(
     modified_process_model_identifier: str,
 ) -> flask.wrappers.Response:
-    """Process_model_file_create."""
     message = f"User: {g.user.username} added process model file"
-    return _create_or_update_process_model_file(
-        modified_process_model_identifier, message, 201
-    )
+    return _create_or_update_process_model_file(modified_process_model_identifier, message, 201)
 
 
-def process_model_file_show(
-    modified_process_model_identifier: str, file_name: str
-) -> Any:
-    """Process_model_file_show."""
+def process_model_file_show(modified_process_model_identifier: str, file_name: str) -> Any:
     process_model_identifier = modified_process_model_identifier.replace(":", "/")
     process_model = _get_process_model(process_model_identifier)
     files = SpecFileService.get_files(process_model, file_name)
     if len(files) == 0:
         raise ApiError(
-            error_code="unknown file",
-            message=(
-                f"No information exists for file {file_name}"
-                f" it does not exist in workflow {process_model_identifier}."
-            ),
+            error_code="process_model_file_not_found",
+            message=f"File {file_name} not found in workflow {process_model_identifier}.",
             status_code=404,
         )
 
     file = files[0]
     file_contents = SpecFileService.get_data(process_model, file.name)
     file.file_contents = file_contents
+    file_contents_hash = sha256(file_contents).hexdigest()
+    file.file_contents_hash = file_contents_hash
     file.process_model_id = process_model.id
-    return FileSchema().dump(file)
+    return make_response(jsonify(file), 200)
+
+
+def process_model_test_run(
+    modified_process_model_identifier: str,
+    test_case_file: str | None = None,
+    test_case_identifier: str | None = None,
+) -> flask.wrappers.Response:
+    process_model_identifier = modified_process_model_identifier.replace(":", "/")
+    process_model = _get_process_model(process_model_identifier)
+    process_model_test_runner = ProcessModelTestRunner(
+        process_model_directory_path=FileSystemService.root_path(),
+        process_model_directory_for_test_discovery=FileSystemService.full_path_from_id(process_model.id),
+        test_case_file=test_case_file,
+        test_case_identifier=test_case_identifier,
+    )
+    process_model_test_runner.run()
+
+    response_json = {
+        "all_passed": process_model_test_runner.all_test_cases_passed(),
+        "passing": process_model_test_runner.passing_tests(),
+        "failing": process_model_test_runner.failing_tests(),
+    }
+    return make_response(jsonify(response_json), 200)
 
 
 #   {
@@ -371,21 +321,16 @@ def process_model_file_show(
 #           with a bug-details form that collects summary, description, and priority"
 #   }
 def process_model_create_with_natural_language(
-    modified_process_group_id: str, body: Dict[str, str]
+    modified_process_group_id: str, body: dict[str, str]
 ) -> flask.wrappers.Response:
-    """Process_model_create_with_natural_language."""
     pattern = re.compile(
-        r"Create a (?P<pm_name>.*?) process model with a (?P<form_name>.*?) form that"
-        r" collects (?P<columns>.*)"
+        r"Create a (?P<pm_name>.*?) process model with a (?P<form_name>.*?) form that" r" collects (?P<columns>.*)"
     )
     match = pattern.match(body["natural_language_text"])
     if match is None:
         raise ApiError(
             error_code="natural_language_text_not_yet_supported",
-            message=(
-                "Natural language text is not yet supported. Please use the form:"
-                f" {pattern.pattern}"
-            ),
+            message=f"Natural language text is not yet supported. Please use the form: {pattern.pattern}",
             status_code=400,
         )
     process_model_display_name = match.group("pm_name")
@@ -399,12 +344,8 @@ def process_model_create_with_natural_language(
     column_names = match.group("columns")
     columns = re.sub(r"(, (and )?)", ",", column_names).split(",")
 
-    process_group = _get_process_group_from_modified_identifier(
-        modified_process_group_id
-    )
-    qualified_process_model_identifier = (
-        f"{process_group.id}/{process_model_identifier}"
-    )
+    process_group = _get_process_group_from_modified_identifier(modified_process_group_id)
+    qualified_process_model_identifier = f"{process_group.id}/{process_model_identifier}"
 
     metadata_extraction_paths = []
     for column in columns:
@@ -425,9 +366,7 @@ def process_model_create_with_natural_language(
             status_code=400,
         )
 
-    bpmn_template_file = os.path.join(
-        current_app.root_path, "templates", "basic_with_user_task_template.bpmn"
-    )
+    bpmn_template_file = os.path.join(current_app.root_path, "templates", "basic_with_user_task_template.bpmn")
     if not os.path.exists(bpmn_template_file):
         raise ApiError(
             error_code="bpmn_template_file_does_not_exist",
@@ -444,9 +383,7 @@ def process_model_create_with_natural_language(
     bpmn_template_contents = bpmn_template_contents.replace(
         "natural_language_process_id_template", bpmn_process_identifier
     )
-    bpmn_template_contents = bpmn_template_contents.replace(
-        "form-identifier-id-template", form_identifier
-    )
+    bpmn_template_contents = bpmn_template_contents.replace("form-identifier-id-template", form_identifier)
 
     form_uischema_json: dict = {"ui:order": columns}
 
@@ -480,21 +417,14 @@ def process_model_create_with_natural_language(
     )
 
     _commit_and_push_to_git(
-        f"User: {g.user.username} created process model via natural language:"
-        f" {process_model_info.id}"
+        f"User: {g.user.username} created process model via natural language: {process_model_info.id}"
     )
 
-    default_report_metadata = ProcessInstanceReportService.system_metadata_map(
-        "default"
-    )
+    default_report_metadata = ProcessInstanceReportService.system_metadata_map("default")
     if default_report_metadata is None:
-        raise ProcessInstanceReportNotFoundError(
-            "Could not find a report with identifier 'default'"
-        )
+        raise ProcessInstanceReportNotFoundError("Could not find a report with identifier 'default'")
     for column in columns:
-        default_report_metadata["columns"].append(
-            {"Header": column, "accessor": column, "filterable": True}
-        )
+        default_report_metadata["columns"].append({"Header": column, "accessor": column, "filterable": True})
     ProcessInstanceReportModel.create_report(
         identifier=process_model_identifier,
         user=g.user,
@@ -509,8 +439,7 @@ def process_model_create_with_natural_language(
 
 
 def _get_file_from_request() -> FileStorage:
-    """Get_file_from_request."""
-    request_file: FileStorage = connexion.request.files.get("file")
+    request_file: FileStorage | None = connexion.request.files.get("file")
     if not request_file:
         raise ApiError(
             error_code="no_file_given",
@@ -523,20 +452,14 @@ def _get_file_from_request() -> FileStorage:
 def _get_process_group_from_modified_identifier(
     modified_process_group_id: str,
 ) -> ProcessGroup:
-    """_get_process_group_from_modified_identifier."""
     if modified_process_group_id is None:
         raise ApiError(
             error_code="process_group_id_not_specified",
-            message=(
-                "Process Model could not be created when process_group_id path param is"
-                " unspecified"
-            ),
+            message="Process Model could not be created when process_group_id path param is unspecified",
             status_code=400,
         )
 
-    unmodified_process_group_id = _un_modify_modified_process_model_id(
-        modified_process_group_id
-    )
+    unmodified_process_group_id = _un_modify_modified_process_model_id(modified_process_group_id)
     process_group = ProcessModelService.get_process_group(unmodified_process_group_id)
     if process_group is None:
         raise ApiError(
@@ -554,8 +477,8 @@ def _create_or_update_process_model_file(
     modified_process_model_identifier: str,
     message_for_git_commit: str,
     http_status_to_return: int,
+    file_contents_hash: str | None = None,
 ) -> flask.wrappers.Response:
-    """_create_or_update_process_model_file."""
     process_model_identifier = modified_process_model_identifier.replace(":", "/")
     process_model = _get_process_model(process_model_identifier)
     request_file = _get_file_from_request()
@@ -575,31 +498,37 @@ def _create_or_update_process_model_file(
             status_code=400,
         )
 
+    if file_contents_hash is not None:
+        current_file_contents_bytes = SpecFileService.get_data(process_model, request_file.filename)
+        if current_file_contents_bytes and file_contents_hash:
+            current_file_contents_hash = sha256(current_file_contents_bytes).hexdigest()
+            if current_file_contents_hash != file_contents_hash:
+                raise ApiError(
+                    error_code="process_model_file_has_changed",
+                    message=(
+                        f"Process model file: {request_file.filename} was already changed by someone else. If you made"
+                        " changes you do not want to lose, click the Download button and make sure your changes are"
+                        " in the resulting file. If you do not need your changes, you can safely reload this page."
+                    ),
+                    status_code=409,
+                )
+
     file = None
     try:
-        file = SpecFileService.update_file(
-            process_model, request_file.filename, request_file_contents
-        )
+        file = SpecFileService.update_file(process_model, request_file.filename, request_file_contents)
     except ProcessModelFileInvalidError as exception:
         raise (
             ApiError(
                 error_code="process_model_file_invalid",
-                message=(
-                    f"Invalid Process model file: {request_file.filename}."
-                    f" Received error: {str(exception)}"
-                ),
+                message=f"Invalid Process model file: {request_file.filename}. Received error: {str(exception)}",
                 status_code=400,
             )
         ) from exception
     file_contents = SpecFileService.get_data(process_model, file.name)
     file.file_contents = file_contents
     file.process_model_id = process_model.id
-    _commit_and_push_to_git(
-        f"{message_for_git_commit} {process_model_identifier}/{file.name}"
-    )
+    file_contents_hash = sha256(file_contents).hexdigest()
+    file.file_contents_hash = file_contents_hash
+    _commit_and_push_to_git(f"{message_for_git_commit} {process_model_identifier}/{file.name}")
 
-    return Response(
-        json.dumps(FileSchema().dump(file)),
-        status=http_status_to_return,
-        mimetype="application/json",
-    )
+    return make_response(jsonify(file), http_status_to_return)

@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
-
-from builtins import range
 # Copyright (C) 2007 Samuel Abels
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -17,6 +16,7 @@ from builtins import range
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
+
 from ..task import TaskState
 from .base import TaskSpec
 from ..operators import valueof
@@ -51,7 +51,6 @@ class MultiInstance(TaskSpec):
             raise ValueError('times argument is required')
         TaskSpec.__init__(self, wf_spec, name, **kwargs)
         self.times = times
-        self.prevtaskclass = None
 
     def _find_my_task(self, task):
         for thetask in task.workflow.task_tree:
@@ -75,33 +74,24 @@ class MultiInstance(TaskSpec):
         for output in self.outputs:
             new_task = my_task._add_child(output, state)
             new_task.triggered = True
-            output._predict(new_task)
+            output._predict(new_task, mask=TaskState.FUTURE|TaskState.READY|TaskState.PREDICTED_MASK)
 
     def _get_predicted_outputs(self, my_task):
         split_n = int(valueof(my_task, self.times, 1))
-
-        # Predict the outputs.
-        outputs = []
-        for i in range(split_n):
-            outputs += self.outputs
-        return outputs
+        return self.outputs * split_n
 
     def _predict_hook(self, my_task):
-        split_n = int(valueof(my_task, self.times, 1))
-        my_task._set_internal_data(splits=split_n)
-
-        # Create the outgoing tasks.
-        outputs = []
-        for i in range(split_n):
-            outputs += self.outputs
+        outputs = self._get_predicted_outputs(my_task)
         if my_task._is_definite():
             my_task._sync_children(outputs, TaskState.FUTURE)
         else:
             my_task._sync_children(outputs, TaskState.LIKELY)
 
-    def _on_complete_hook(self, my_task):
+    def _run_hook(self, my_task):
         outputs = self._get_predicted_outputs(my_task)
         my_task._sync_children(outputs, TaskState.FUTURE)
+        self._predict(my_task, mask=TaskState.FUTURE|TaskState.PREDICTED_MASK)
+        return True
 
     def serialize(self, serializer):
         return serializer.serialize_multi_instance(self)

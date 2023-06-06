@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-
-# Copyright (C) 2007 Samuel Abels
+# Copyright (C) 2007 Samuel Abels, 2023 Sartography
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -20,13 +20,13 @@
 import logging
 
 from .specs.Simple import Simple
-from .specs.LoopResetTask import LoopResetTask
 from .task import Task, TaskState
 from .util.compat import mutex
 from .util.event import Event
-from .exceptions import WorkflowException
+from .exceptions import TaskNotFoundException, WorkflowException
 
 logger = logging.getLogger('spiff')
+
 
 class Workflow(object):
 
@@ -54,36 +54,33 @@ class Workflow(object):
         self.outer_workflow = kwargs.get('parent', self)
         self.locks = {}
         self.last_task = None
-        if deserializing:
-            assert 'Root' in workflow_spec.task_specs
-            root = workflow_spec.task_specs['Root']  # Probably deserialized
+        if 'Root' in workflow_spec.task_specs:
+            root = workflow_spec.task_specs['Root']
         else:
-            if 'Root' in workflow_spec.task_specs:
-                root = workflow_spec.task_specs['Root']
-            else:
-                root = Simple(workflow_spec, 'Root')
-            logger.info('Initialize', extra=self.log_info())
+            root = Simple(workflow_spec, 'Root')
 
         # Setting TaskState.COMPLETED prevents the root task from being executed.
         self.task_tree = Task(self, root, state=TaskState.COMPLETED)
+        start = self.task_tree._add_child(self.spec.start, state=TaskState.FUTURE)
         self.success = True
         self.debug = False
 
         # Events.
         self.completed_event = Event()
 
-        start = self.task_tree._add_child(self.spec.start, state=TaskState.FUTURE)
-
-        self.spec.start._predict(start)
-        if 'parent' not in kwargs:
-            start.task_spec._update(start)
+        if not deserializing:
+            self._predict()
+            if 'parent' not in kwargs:
+                start.task_spec._update(start)
+            logger.info('Initialize', extra=self.log_info())
 
         self.task_mapping = self._get_task_mapping()
 
     def log_info(self, dct=None):
         extra = dct or {}
         extra.update({
-            'workflow': self.spec.name,
+            'workflow_spec': self.spec.name,
+            'workflow_name': self.spec.description,
             'task_spec': '-',
             'task_type': None,
             'task_id': None,
@@ -101,11 +98,15 @@ class Workflow(object):
         mask = TaskState.NOT_FINISHED_MASK
         iter = Task.Iterator(self.task_tree, mask)
         try:
-            nexttask = next(iter)
+            next(iter)
         except StopIteration:
             # No waiting tasks found.
             return True
         return False
+
+    def _predict(self, mask=TaskState.NOT_FINISHED_MASK):
+        for task in Workflow.get_tasks(self,TaskState.NOT_FINISHED_MASK):
+            task.task_spec._predict(task, mask=mask)
 
     def _get_waiting_tasks(self):
         waiting = Task.Iterator(self.task_tree, TaskState.WAITING)
@@ -171,17 +172,16 @@ class Workflow(object):
         Cancels all open tasks in the workflow.
 
         :type  success: bool
-        :param success: Whether the Workflow should be marked as successfully
-                        completed.
+        :param success: Whether the Workflow should be marked as successfully completed.
         """
         self.success = success
         cancel = []
-        mask = TaskState.NOT_FINISHED_MASK
-        for task in Task.Iterator(self.task_tree, mask):
+        for task in Task.Iterator(self.task_tree, TaskState.NOT_FINISHED_MASK):
             cancel.append(task)
         for task in cancel:
             task.cancel()
         logger.info(f'Cancel with {len(cancel)} remaining', extra=self.log_info())
+        return cancel
 
     def get_task_spec_from_name(self, name):
         """
@@ -194,24 +194,6 @@ class Workflow(object):
         """
         return self.spec.get_task_spec_from_name(name)
 
-    def get_task(self, id,tasklist=None):
-        """
-        Returns the task with the given id.
-
-        :type id:integer
-        :param id: The id of a task.
-        :param tasklist: Optional cache of get_tasks for operations
-                         where we are calling multiple times as when we
-                         are deserializing the workflow
-        :rtype: Task
-        :returns: The task with the given id.
-        """
-        if tasklist:
-            tasks = [task for task in tasklist if task.id == id]
-        else:
-            tasks = [task for task in self.get_tasks() if task.id == id]
-        return tasks[0] if len(tasks) == 1 else None
-
     def get_tasks_from_spec_name(self, name):
         """
         Returns all tasks whose spec has the given name.
@@ -221,22 +203,7 @@ class Workflow(object):
         :rtype: list[Task]
         :returns: A list of tasks that relate to the spec with the given name.
         """
-        return [task for task in self.get_tasks_iterator()
-                if task.task_spec.name == name]
-
-    def empty(self,str):
-        if str == None:
-            return True
-        if str == '':
-            return True
-        return False
-
-    def cancel_notify(self):
-        self.task_tree.internal_data['cancels'] = self.task_tree.internal_data.get('cancels', {})
-        self.task_tree.internal_data['cancels']['TokenReset'] = True
-        self.refresh_waiting_tasks()
-        self.do_engine_steps()
-        self.task_tree.internal_data['cancels'] = {}
+        return [task for task in self.get_tasks_iterator() if task.task_spec.name == name]
 
     def get_tasks(self, state=TaskState.ANY_MASK):
         """
@@ -249,38 +216,6 @@ class Workflow(object):
         """
         return [t for t in Task.Iterator(self.task_tree, state)]
 
-    def reset_task_from_id(self, task_id):
-        """
-        Runs the task with the given id.
-
-        :type  task_id: integer
-        :param task_id: The id of the Task object.
-        """
-        if task_id is None:
-            raise WorkflowException('task_id is None', task_spec=self.spec)
-        data = {}
-        if self.last_task and self.last_task.data:
-            data = self.last_task.data
-        for task in self.task_tree:
-            if task.id == task_id:
-                return task.reset_token(data)
-        msg = 'A task with the given task_id (%s) was not found' % task_id
-        raise WorkflowException(msg, task_spec=self.spec)
-
-    def get_reset_task_spec(self, destination):
-        """
-        Returns a task, that once complete, will reset the workflow back
-        to a previously completed task.
-        :param destination: Task to reset to, on complete.
-        :return: TaskSpec
-        """
-        name = "return_to_" + destination.task_spec.name
-        spec = self.get_task_spec_from_name(name)
-        if not spec:
-            spec = LoopResetTask(self.spec, name, destination.id,
-                                 destination.task_spec.name)
-        return spec
-
     def get_tasks_iterator(self, state=TaskState.ANY_MASK):
         """
         Returns a iterator of Task objects with the given state.
@@ -292,22 +227,49 @@ class Workflow(object):
         """
         return Task.Iterator(self.task_tree, state)
 
-    def complete_task_from_id(self, task_id):
+    def get_task_from_id(self, task_id, tasklist=None):
+        """
+        Returns the task with the given id.
+
+        :type id:integer
+        :param id: The id of a task.
+        :param tasklist: Optional cache of get_tasks for operations
+                         where we are calling multiple times as when we
+                         are deserializing the workflow
+        :rtype: Task
+        :returns: The task with the given id.
+        """
+        if task_id is None:
+            raise WorkflowException('task_id is None', task_spec=self.spec)
+        tasklist = tasklist or self.task_tree
+        for task in self.task_tree:
+            if task.id == task_id:
+                return task
+        msg = 'A task with the given task_id (%s) was not found' % task_id
+        raise TaskNotFoundException(msg, task_spec=self.spec)
+
+    def run_task_from_id(self, task_id):
         """
         Runs the task with the given id.
 
         :type  task_id: integer
         :param task_id: The id of the Task object.
         """
-        if task_id is None:
-            raise WorkflowException('task_id is None', task_spec=self.spec)
-        for task in self.task_tree:
-            if task.id == task_id:
-                return task.complete()
-        msg = 'A task with the given task_id (%s) was not found' % task_id
-        raise WorkflowException(msg, task_spec=self.spec)
+        task = self.get_task_from_id(task_id)
+        return task.run()
 
-    def complete_next(self, pick_up=True, halt_on_manual=True):
+    def reset_from_task_id(self, task_id, data=None):
+        """
+        Runs the task with the given id.
+
+        :type  task_id: integer
+        :param task_id: The id of the Task object.
+        :param data: optionall set the task data
+        """
+        task = self.get_task_from_id(task_id)
+        return task.reset_token(data)
+
+    def run_next(self, pick_up=True, halt_on_manual=True):
         """
         Runs the next task.
         Returns True if completed, False otherwise.
@@ -335,7 +297,7 @@ class Workflow(object):
             self.last_task = None
             if task is not None:
                 if not (halt_on_manual and task.task_spec.manual):
-                    if task.complete():
+                    if task.run():
                         self.last_task = task
                         return True
                 blacklist.append(task)
@@ -346,7 +308,7 @@ class Workflow(object):
                 if task._is_descendant_of(blacklisted_task):
                     continue
             if not (halt_on_manual and task.task_spec.manual):
-                if task.complete():
+                if task.run():
                     self.last_task = task
                     return True
             blacklist.append(task)
@@ -359,7 +321,7 @@ class Workflow(object):
                 return True
         return False
 
-    def complete_all(self, pick_up=True, halt_on_manual=True):
+    def run_all(self, pick_up=True, halt_on_manual=True):
         """
         Runs all branches until completion. This is a convenience wrapper
         around :meth:`complete_next`, and the pick_up argument is passed
@@ -372,7 +334,7 @@ class Workflow(object):
                         complete any tasks that have manual=True.
                         See :meth:`SpiffWorkflow.specs.TaskSpec.__init__`
         """
-        while self.complete_next(pick_up, halt_on_manual):
+        while self.run_next(pick_up, halt_on_manual):
             pass
 
     def get_dump(self):

@@ -12,10 +12,13 @@ repos:
         # exclude: ^migrations/
         exclude: "/migrations/"
 
-        # otherwise it will not fix long lines if the long lines contain long strings
+        # --preview because otherwise it will not fix long lines if the long lines contain long strings
         # https://github.com/psf/black/pull/1132
         # https://github.com/psf/black/pull/1609
-        args: [--preview]
+        # --line-length because then we can avoid the fancy line wrapping in more instances and jason, kb, and elizabeth
+        # kind of prefer long lines rather than cutely-formatted sets of lines.
+        # TODO: enable when its safe to update the files
+        args: [--preview, --line-length, "119"]
 
       - id: check-added-large-files
         files: ^spiffworkflow-backend/
@@ -41,30 +44,13 @@ repos:
         language: system
         types: [text]
         stages: [commit, push, manual]
-      - id: flake8
+      - id: ruff
         files: ^spiffworkflow-backend/
-        name: flake8
-        entry: flake8
+        name: ruff
+        entry: ruff
         language: system
         types: [python]
         require_serial: true
-        exclude: "/migrations/"
-      - id: pyupgrade
-        files: ^spiffworkflow-backend/
-        name: pyupgrade
-        description: Automatically upgrade syntax for newer versions.
-        entry: pyupgrade
-        language: system
-        types: [python]
-        args: [--py37-plus]
-      - id: reorder-python-imports
-        files: ^spiffworkflow-backend/
-        name: Reorder python imports
-        entry: reorder-python-imports
-        language: system
-        types: [python]
-        args: [--application-directories=spiffworkflow-backend/src]
-        exclude: "(/migrations/|load_database_models)"
       - id: trailing-whitespace
         files: ^spiffworkflow-backend/
         name: Trim Trailing Whitespace

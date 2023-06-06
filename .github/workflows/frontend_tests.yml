@@ -1,8 +1,10 @@
 name: Frontend Tests
 
 on:
-  - push
-  - pull_request
+  workflow_run:
+    workflows: ["Backend Tests"]
+    # completed does not mean success of Tests workflow. see below checking github.event.workflow_run.conclusion
+    types: [completed]
 
 defaults:
   run:
@@ -13,6 +15,7 @@ defaults:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Development Code
         uses: actions/checkout@v3
@@ -56,7 +59,8 @@ jobs:
           path: pr/
 
   cypress-run:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -87,15 +91,24 @@ jobs:
       - name: wait_for_keycloak
         working-directory: ./spiffworkflow-backend
         run: ./keycloak/bin/wait_for_keycloak 5
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: |
+          echo "$GITHUB_CONTEXT"
       - name: Cypress run
-        uses: cypress-io/github-action@v4
+        uses: cypress-io/github-action@v5
         with:
           working-directory: ./spiffworkflow-frontend
           browser: chrome
           # only record on push, not pull_request, since we do not have secrets for PRs,
           # so the required CYPRESS_RECORD_KEY will not be available.
           # we have limited runs in cypress cloud, so only record main builds
-          record: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
+          # the direct check for github.event_name == 'push' is for if we want to go back to triggering this workflow
+          # directly, rather than when Backend Tests complete.
+          # note that github.event.workflow_run is referring to the Backend Tests workflow and another option
+          # for github.event.workflow_run.event is 'pull_request', which we want to ignore.
+          record: ${{ github.ref_name == 'main' && ((github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push') || (github.event_name == 'push')) }}
         env:
           # pass the Dashboard record key as an environment variable
           CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
@@ -108,21 +121,21 @@ jobs:
         run: ./bin/get_logs_from_docker_compose >./log/docker_compose.log
       - name: Upload logs
         if: failure()
-        uses: "actions/upload-artifact@v3.0.0"
+        uses: "actions/upload-artifact@v3"
         with:
           name: spiffworkflow-backend-logs
           path: "./spiffworkflow-backend/log/*.log"
 
       #  https://github.com/cypress-io/github-action#artifacts
       - name: upload_screenshots
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cypress-screenshots
           path: ./spiffworkflow-frontend/cypress/screenshots
       # Test run video was always captured, so this action uses "always()" condition
       - name: upload_videos
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cypress-videos

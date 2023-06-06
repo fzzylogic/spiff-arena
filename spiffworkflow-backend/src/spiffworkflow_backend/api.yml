@@ -148,6 +148,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkTrue"
 
+  /debug/test-raise-error:
+    post:
+      operationId: spiffworkflow_backend.routes.debug_controller.test_raise_error
+      summary: Returns an unhandled exception that should notify sentry, if sentry is configured
+      tags:
+        - Status
+      responses:
+        "500":
+          description: The server raises a test error as expected.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkTrue"
+
+  /debug/version-info:
+    get:
+      operationId: spiffworkflow_backend.routes.debug_controller.version_info
+      summary: Returns information about the version of the application
+      tags:
+        - Status
+      responses:
+        "200":
+          description: Returns version info if it exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkTrue"
+
+  /active-users/updates/{last_visited_identifier}:
+    parameters:
+      - name: last_visited_identifier
+        in: path
+        required: true
+        description: The identifier for the last visited page for the user.
+        schema:
+          type: string
+    post:
+      tags:
+        - Active User
+      operationId: spiffworkflow_backend.routes.active_users_controller.active_user_updates
+      summary: An SSE (Server Sent Events) endpoint that returns what users are also currently viewing the same page as you.
+      responses:
+        "200":
+          description: list of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+
+  /active-users/unregister/{last_visited_identifier}:
+    parameters:
+      - name: last_visited_identifier
+        in: path
+        required: true
+        description: The identifier for the last visited page for the user.
+        schema:
+          type: string
+    post:
+      tags:
+        - Active User
+      operationId: spiffworkflow_backend.routes.active_users_controller.active_user_unregister
+      summary: Unregisters a user from a page. To be used when the /active-users/updates endpoint is closed.
+      responses:
+        "200":
+          description: The current user has unregistered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkTrue"
+
   /process-groups:
     parameters:
       - name: process_group_identifier
@@ -181,7 +253,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ProcessModelCategory"
+                  $ref: "#/components/schemas/ProcessGroup"
     post:
       operationId: spiffworkflow_backend.routes.process_groups_controller.process_group_create
       summary: Add process group
@@ -191,14 +263,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProcessModelCategory"
+              $ref: "#/components/schemas/ProcessGroup"
       responses:
         "201":
           description: Processs Group
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProcessModelCategory"
+                $ref: "#/components/schemas/ProcessGroup"
 
   /process-groups/{modified_process_group_id}:
     parameters:
@@ -220,7 +292,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProcessModelCategory"
+                $ref: "#/components/schemas/ProcessGroup"
     delete:
       operationId: spiffworkflow_backend.routes.process_groups_controller.process_group_delete
       summary: Deletes a single process group
@@ -238,14 +310,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProcessModelCategory"
+              $ref: "#/components/schemas/ProcessGroup"
       responses:
         "200":
           description: Process group updated successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProcessModelCategory"
+                $ref: "#/components/schemas/ProcessGroup"
 
   /process-groups/{modified_process_group_identifier}/move:
     parameters:
@@ -272,7 +344,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProcessModelCategory"
+                $ref: "#/components/schemas/ProcessGroup"
 
   /process-models:
     parameters:
@@ -353,7 +425,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProcessModel"
 
-  /process-models-natural-language/{modified_process_group_id}:
+  /process-model-natural-language/{modified_process_group_id}:
     parameters:
       - name: modified_process_group_id
         in: path
@@ -378,6 +450,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProcessModel"
+
+  /process-model-tests/{modified_process_model_identifier}:
+    parameters:
+      - name: modified_process_model_identifier
+        in: path
+        required: true
+        description: The process_model_id, modified to replace slashes (/)
+        schema:
+          type: string
+      - name: test_case_file
+        in: query
+        required: false
+        description: The name of the test case file to run
+        schema:
+          type: string
+      - name: test_case_identifier
+        in: query
+        required: false
+        description: The name of the test case file to run
+        schema:
+          type: string
+    post:
+      operationId: spiffworkflow_backend.routes.process_models_controller.process_model_test_run
+      summary: Run a test for a process model
+      tags:
+        - Process Model Tests
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Metadata about the uploaded file, but not the file content.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/File"
 
   /process-models/{modified_process_model_identifier}/files:
     parameters:
@@ -492,7 +606,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProcessModel"
 
-  /process-models/{modified_process_model_identifier}/publish:
+  /process-model-publish/{modified_process_model_identifier}:
     parameters:
       - name: modified_process_model_identifier
         in: path
@@ -518,6 +632,31 @@ paths:
             application/json:
               schema:
                 type: string
+
+  /processes/callers:
+    parameters:
+      - name: bpmn_process_identifier
+        in: query
+        required: true
+        description: the bpmn process identifier/id (not the name with spaces and not the process model identifier)
+        schema:
+          type: string
+    get:
+      operationId: spiffworkflow_backend.routes.process_api_blueprint.process_caller_list
+      summary:
+        Return a list of information about all processes that call the provided process id
+      tags:
+        - Process Models
+      responses:
+        "200":
+          description: Successfully return the requested calling processes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Process"
+
 
   /processes:
     get:
@@ -545,7 +684,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProcessModelCategory"
+              $ref: "#/components/schemas/ProcessGroup"
       tags:
         - git
       responses:
@@ -576,95 +715,18 @@ paths:
         description: The page number to return. Defaults to page 1.
         schema:
           type: integer
-      - name: start_from
-        in: query
-        required: false
-        description: For filtering - beginning of start window - in seconds since epoch
-        schema:
-          type: integer
-      - name: start_to
-        in: query
-        required: false
-        description: For filtering - end of start window - in seconds since epoch
-        schema:
-          type: integer
-      - name: end_from
-        in: query
-        required: false
-        description: For filtering - beginning of end window - in seconds since epoch
-        schema:
-          type: integer
-      - name: end_to
-        in: query
-        required: false
-        description: For filtering - end of end window - in seconds since epoch
-        schema:
-          type: integer
-      - name: process_status
-        in: query
-        required: false
-        description: For filtering - not_started, user_input_required, waiting, complete, error, or suspended
-        schema:
-          type: string
-      - name: initiated_by_me
-        in: query
-        required: false
-        description: For filtering - show instances initiated by me
-        schema:
-          type: boolean
-      - name: with_tasks_completed_by_me
-        in: query
-        required: false
-        description: For filtering - show instances with tasks completed by me
-        schema:
-          type: boolean
-      - name: with_tasks_completed_by_my_group
-        in: query
-        required: false
-        description: For filtering - show instances with tasks completed by my group
-        schema:
-          type: boolean
-      - name: with_relation_to_me
-        in: query
-        required: false
-        description: For filtering - show instances that have something to do with me
-        schema:
-          type: boolean
-      - name: user_filter
-        in: query
-        required: false
-        description: For filtering - indicates the user has manually entered a query
-        schema:
-          type: boolean
-      - name: report_identifier
-        in: query
-        required: false
-        description: Specifies the identifier of a report to use, if any
-        schema:
-          type: string
-      - name: report_id
-        in: query
-        required: false
-        description: Specifies the identifier of a report to use, if any
-        schema:
-          type: integer
-      - name: user_group_identifier
-        in: query
-        required: false
-        description: The identifier of the group to get the process instances for
-        schema:
-          type: string
-      - name: process_initiator_username
-        in: query
-        required: false
-        description: The username of the process initiator
-        schema:
-          type: string
-    get:
+    post:
       operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_list_for_me
       summary: Returns a list of process instances that are associated with me.
       tags:
         - Process Instances
+      requestBody:
+        description: Report dictionary to use.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessInstanceReport"
       responses:
         "200":
           description: Workflow.
@@ -695,95 +757,18 @@ paths:
         description: The page number to return. Defaults to page 1.
         schema:
           type: integer
-      - name: start_from
-        in: query
-        required: false
-        description: For filtering - beginning of start window - in seconds since epoch
-        schema:
-          type: integer
-      - name: start_to
-        in: query
-        required: false
-        description: For filtering - end of start window - in seconds since epoch
-        schema:
-          type: integer
-      - name: end_from
-        in: query
-        required: false
-        description: For filtering - beginning of end window - in seconds since epoch
-        schema:
-          type: integer
-      - name: end_to
-        in: query
-        required: false
-        description: For filtering - end of end window - in seconds since epoch
-        schema:
-          type: integer
-      - name: process_status
-        in: query
-        required: false
-        description: For filtering - not_started, user_input_required, waiting, complete, error, or suspended
-        schema:
-          type: string
-      - name: initiated_by_me
-        in: query
-        required: false
-        description: For filtering - show instances initiated by me
-        schema:
-          type: boolean
-      - name: with_tasks_completed_by_me
-        in: query
-        required: false
-        description: For filtering - show instances with tasks completed by me
-        schema:
-          type: boolean
-      - name: with_tasks_completed_by_my_group
-        in: query
-        required: false
-        description: For filtering - show instances with tasks completed by my group
-        schema:
-          type: boolean
-      - name: with_relation_to_me
-        in: query
-        required: false
-        description: For filtering - show instances that have something to do with me
-        schema:
-          type: boolean
-      - name: user_filter
-        in: query
-        required: false
-        description: For filtering - indicates the user has manually entered a query
-        schema:
-          type: boolean
-      - name: report_identifier
-        in: query
-        required: false
-        description: Specifies the identifier of a report to use, if any
-        schema:
-          type: string
-      - name: report_id
-        in: query
-        required: false
-        description: Specifies the identifier of a report to use, if any
-        schema:
-          type: integer
-      - name: user_group_identifier
-        in: query
-        required: false
-        description: The identifier of the group to get the process instances for
-        schema:
-          type: string
-      - name: process_initiator_username
-        in: query
-        required: false
-        description: The username of the process initiator
-        schema:
-          type: string
-    get:
+    post:
       operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_list
       summary: Returns a list of process instances.
       tags:
         - Process Instances
+      requestBody:
+        description: Report dictionary to use.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessInstanceReport"
       responses:
         "200":
           description: Workflow.
@@ -877,18 +862,24 @@ paths:
         description: The identifier of the process to use for the diagram. Useful for displaying the diagram for a call activity.
         schema:
           type: string
-      - name: all_tasks
+      - name: most_recent_tasks_only
         in: query
         required: false
-        description: If true, this wil return all tasks associated with the process instance and not just user tasks.
+        description: If true, this wil return only the most recent tasks.
         schema:
           type: boolean
-      - name: spiff_step
+      - name: bpmn_process_guid
         in: query
         required: false
-        description: If set will return the tasks as they were during a specific step of execution.
+        description: The guid of the bpmn process to get the tasks for.
         schema:
-          type: integer
+          type: string
+      - name: to_task_guid
+        in: query
+        required: false
+        description: Get the tasks only up to the given guid.
+        schema:
+          type: string
     get:
       tags:
         - Process Instances
@@ -924,18 +915,24 @@ paths:
         description: The identifier of the process to use for the diagram. Useful for displaying the diagram for a call activity.
         schema:
           type: string
-      - name: all_tasks
+      - name: most_recent_tasks_only
         in: query
         required: false
-        description: If true, this wil return all tasks associated with the process instance and not just user tasks.
+        description: If true, this wil return only the most recent tasks.
         schema:
           type: boolean
-      - name: spiff_step
+      - name: bpmn_process_guid
         in: query
         required: false
-        description: If set will return the tasks as they were during a specific step of execution.
+        description: The guid of the bpmn process to get the tasks for.
         schema:
-          type: integer
+          type: string
+      - name: to_task_guid
+        in: query
+        required: false
+        description: Get the tasks only up to the given guid.
+        schema:
+          type: string
     get:
       tags:
         - Process Instances
@@ -1140,7 +1137,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/OkTrue"
 
-  /process-instance-reset/{modified_process_model_identifier}/{process_instance_id}/{spiff_step}:
+  /process-instance-reset/{modified_process_model_identifier}/{process_instance_id}/{to_task_guid}:
     parameters:
       - name: modified_process_model_identifier
         in: path
@@ -1154,12 +1151,12 @@ paths:
         description: The unique id of an existing process instance.
         schema:
           type: integer
-      - name: spiff_step
-        in: query
-        required: false
-        description: Reset the process to this state
+      - name: to_task_guid
+        in: path
+        required: true
+        description: Get the tasks only up to the given guid.
         schema:
-          type: integer
+          type: string
     post:
       operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_reset
       summary: Reset a process instance to an earlier step
@@ -1167,7 +1164,7 @@ paths:
         - Process Instances
       responses:
         "200":
-          description: Empty ok true response on successful resume.
+          description: Empty ok true response on successful reset.
           content:
             application/json:
               schema:
@@ -1192,15 +1189,16 @@ paths:
       summary: Returns all process instance reports for process model
       tags:
         - Process Instances
+        - Process Instances Reports
       responses:
         "200":
-          description: Workflow.
+          description: Process Instance Report
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Workflow"
+                  $ref: "#/components/schemas/ProcessInstanceReport"
     post:
       operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_report_create
       summary: Returns all process instance reports for process model
@@ -1215,9 +1213,51 @@ paths:
                 $ref: "#/components/schemas/OkTrue"
 
   /process-instances/reports/columns:
+    parameters:
+      - name: process_model_identifier
+        in: query
+        required: false
+        description: The process model identifier to filter by
+        schema:
+          type: string
     get:
       operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_report_column_list
-      summary: Returns all available columns for a process instance report.
+      summary: Returns all available columns for a process instance report, including custom metadata
+      tags:
+        - Process Instances
+      responses:
+        "200":
+          description: Workflow.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workflow"
+
+  /process-instances/report-metadata:
+    parameters:
+      - name: report_hash
+        in: query
+        required: false
+        description: The hash of a query that has been searched before.
+        schema:
+          type: string
+      - name: report_id
+        in: query
+        required: false
+        description: The unique id of an existing report.
+        schema:
+          type: integer
+      - name: report_identifier
+        in: query
+        required: false
+        description: Specifies the identifier of a report to use, if any
+        schema:
+          type: string
+    get:
+      operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_report_show
+      summary: Returns the metadata associated with a given report key. This favors report_hash over report_id and report_identifier.
       tags:
         - Process Instances
       responses:
@@ -1250,20 +1290,6 @@ paths:
         description: The page number to return. Defaults to page 1.
         schema:
           type: integer
-    get:
-      operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_report_show
-      summary: Returns a report of process instances for a given process model
-      tags:
-        - Process Instances
-      responses:
-        "200":
-          description: Workflow.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Workflow"
     put:
       operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_report_update
       summary: Updates a process instance report
@@ -1318,6 +1344,13 @@ paths:
     put:
       operationId: spiffworkflow_backend.routes.process_models_controller.process_model_file_update
       summary: save the contents to the given file
+      parameters:
+        - name: file_contents_hash
+          in: query
+          required: false
+          description: The hash of the file contents that originally came with the file.
+          schema:
+            type: string
       tags:
         - Process Model Files
       requestBody:
@@ -1502,6 +1535,25 @@ paths:
                 items:
                   $ref: "#/components/schemas/User"
 
+  /users/exists/by-username:
+    post:
+      tags:
+        - Users
+      operationId: spiffworkflow_backend.routes.users_controller.user_exists_by_username
+      summary: Returns a true if user exists by username.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/User"
+      responses:
+        "200":
+          description: true if user exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkTrue"
+
   /user-groups/for-current-user:
     get:
       tags:
@@ -1518,7 +1570,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/Task"
 
-  /task-data/{modified_process_model_identifier}/{process_instance_id}:
+  /task-data/{modified_process_model_identifier}/{process_instance_id}/{task_guid}:
     parameters:
       - name: modified_process_model_identifier
         in: path
@@ -1532,55 +1584,26 @@ paths:
         description: The unique id of an existing process instance.
         schema:
           type: integer
-      - name: all_tasks
-        in: query
-        required: false
-        description: If true, this wil return all tasks associated with the process instance and not just user tasks.
+      - name: task_guid
+        in: path
+        required: true
+        description: The unique id of the task.
         schema:
-          type: boolean
-      - name: spiff_step
-        in: query
-        required: false
-        description: If set will return the tasks as they were during a specific step of execution.
-        schema:
-          type: integer
+          type: string
     get:
+      operationId: spiffworkflow_backend.routes.tasks_controller.task_data_show
+      summary: Get task data for a single task.
       tags:
         - Process Instances
-      operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_task_list_with_task_data
-      summary: returns the list of all user tasks associated with process instance with the task data
       responses:
         "200":
           description: list of tasks
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Task"
-
-  /task-data/{modified_process_model_identifier}/{process_instance_id}/{task_id}:
-    parameters:
-      - name: modified_process_model_identifier
-        in: path
-        required: true
-        description: The modified id of an existing process model
-        schema:
-          type: string
-      - name: process_instance_id
-        in: path
-        required: true
-        description: The unique id of an existing process instance.
-        schema:
-          type: integer
-      - name: task_id
-        in: path
-        required: true
-        description: The unique id of the task.
-        schema:
-          type: string
+                $ref: "#/components/schemas/Task"
     put:
-      operationId: spiffworkflow_backend.routes.process_api_blueprint.task_data_update
+      operationId: spiffworkflow_backend.routes.tasks_controller.task_data_update
       summary: Update the task data for requested instance and task
       tags:
         - Process Instances
@@ -1645,12 +1668,6 @@ paths:
         description: The identifier of the process data.
         schema:
           type: string
-      - name: index
-        in: query
-        required: false
-        description: The optional index of the value if key's value is an array
-        schema:
-          type: integer
     get:
       operationId: spiffworkflow_backend.routes.process_api_blueprint.process_data_file_download
       summary: Download the file referneced in the process data value.
@@ -1677,9 +1694,9 @@ paths:
         required: true
         description: The unique id of the process instance
         schema:
-          type: string
+          type: integer
     post:
-      operationId: spiffworkflow_backend.routes.process_api_blueprint.send_bpmn_event
+      operationId: spiffworkflow_backend.routes.process_instances_controller.send_bpmn_event
       summary: Send a BPMN event to the process
       tags:
         - Process Instances
@@ -1691,7 +1708,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Workflow"
 
-  /task-complete/{modified_process_model_identifier}/{process_instance_id}/{task_id}:
+  /task-complete/{modified_process_model_identifier}/{process_instance_id}/{task_guid}:
     parameters:
       - name: modified_process_model_identifier
         in: path
@@ -1705,14 +1722,14 @@ paths:
         description: The unique id of the process instance
         schema:
           type: string
-      - name: task_id
+      - name: task_guid
         in: path
         required: true
         description: The unique id of the task.
         schema:
           type: string
     post:
-      operationId: spiffworkflow_backend.routes.process_api_blueprint.manual_complete_task
+      operationId: spiffworkflow_backend.routes.tasks_controller.manual_complete_task
       summary: Mark a task complete without executing it
       tags:
         - Process Instances
@@ -1791,9 +1808,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ServiceTask"
 
-  /tasks/{process_instance_id}/{task_id}:
+  /tasks/{process_instance_id}:
     parameters:
-      - name: task_id
+      - name: process_instance_id
+        in: path
+        required: true
+        description: The unique id of an existing process instance.
+        schema:
+          type: integer
+    get:
+      tags:
+        - Tasks
+      operationId: spiffworkflow_backend.routes.tasks_controller.interstitial
+      summary: An SSE (Server Sent Events) endpoint that returns what tasks are currently active (running, waiting, or the final END event)
+      responses:
+        "200":
+          description: One task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{process_instance_id}/{task_guid}:
+    parameters:
+      - name: task_guid
         in: path
         required: true
         description: The unique id of an existing process group.
@@ -1805,10 +1843,10 @@ paths:
         description: The unique id of an existing process instance.
         schema:
           type: integer
-      - name: terminate_loop
+      - name: save_as_draft
         in: query
         required: false
-        description: Terminate the loop on a looping task
+        description: Save the data to task but do not complete it.
         schema:
           type: boolean
     get:
@@ -1832,7 +1870,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProcessModelCategory"
+              $ref: "#/components/schemas/ProcessGroup"
       responses:
         "200":
           description: One task
@@ -1846,6 +1884,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OkTrue"
+
+  /tasks/{process_instance_id}/send-user-signal-event:
+    parameters:
+      - name: process_instance_id
+        in: path
+        required: true
+        description: The unique id of the process instance
+        schema:
+          type: integer
+    post:
+      operationId: spiffworkflow_backend.routes.process_instances_controller.send_user_signal_event
+      summary: Send a BPMN event to the process
+      tags:
+        - Process Instances
+      responses:
+        "200":
+          description: Event Sent Successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
 
   /messages:
     parameters:
@@ -1880,19 +1939,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/Workflow"
 
-  /messages/{message_identifier}:
+  /messages/{message_name}:
     parameters:
-      - name: message_identifier
+      - name: message_name
         in: path
         required: true
-        description: The unique identifier of the message model.
+        description: The unique name of the message.
         schema:
           type: string
     post:
       tags:
         - Messages
       operationId: spiffworkflow_backend.routes.messages_controller.message_send
-      summary: Instantiate and run a given process model with a message start event matching given identifier
+      summary: Instantiate and run a given process model with a message start event matching given name
       requestBody:
         content:
           application/json:
@@ -1926,20 +1985,110 @@ paths:
         description: The number of items to show per page. Defaults to page 10.
         schema:
           type: integer
-      - name: detailed
+      - name: events
         in: query
         required: false
-        description: Show the detailed view, which includes all log entries
+        description: Show the events view, which includes all log entries
         schema:
           type: boolean
+      - name: bpmn_name
+        in: query
+        required: false
+        description: The bpmn name of the task to search for.
+        schema:
+          type: string
+      - name: bpmn_identifier
+        in: query
+        required: false
+        description: The bpmn identifier of the task to search for.
+        schema:
+          type: string
+      - name: task_type
+        in: query
+        required: false
+        description: The task type of the task to search for.
+        schema:
+          type: string
+      - name: event_type
+        in: query
+        required: false
+        description: The type of the event to search for.
+        schema:
+          type: string
     get:
       tags:
-        - Process Instances
-      operationId: spiffworkflow_backend.routes.process_instances_controller.process_instance_log_list
+        - Process Instance Events
+      operationId: spiffworkflow_backend.routes.process_instance_events_controller.log_list
       summary: returns a list of logs associated with the process instance
       responses:
         "200":
           description: list of logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessInstanceLog"
+
+  /logs/typeahead-filter-values/{modified_process_model_identifier}/{process_instance_id}:
+    parameters:
+      - name: process_instance_id
+        in: path
+        required: true
+        description: the id of the process instance
+        schema:
+          type: integer
+      - name: modified_process_model_identifier
+        in: path
+        required: true
+        description: The process_model_id, modified to replace slashes (/)
+        schema:
+          type: string
+      - name: task_type
+        in: query
+        required: false
+        description: The task type of the typehead filter values to get.
+        schema:
+          type: string
+    get:
+      tags:
+        - Process Instance Events
+      operationId: spiffworkflow_backend.routes.process_instance_events_controller.typeahead_filter_values
+      summary: returns a list of task types and event typs. useful for building log queries.
+      responses:
+        "200":
+          description: list of types
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessInstanceLog"
+
+  /event-error-details/{modified_process_model_identifier}/{process_instance_id}/{process_instance_event_id}:
+    parameters:
+      - name: process_instance_id
+        in: path
+        required: true
+        description: the id of the process instance
+        schema:
+          type: integer
+      - name: modified_process_model_identifier
+        in: path
+        required: true
+        description: The process_model_id, modified to replace slashes (/)
+        schema:
+          type: string
+      - name: process_instance_event_id
+        in: path
+        required: true
+        description: the id of the process instance event
+        schema:
+          type: integer
+    get:
+      tags:
+        - Process Instance Events
+      operationId: spiffworkflow_backend.routes.process_instance_events_controller.error_detail_show
+      summary: returns the error details for a given process instance event.
+      responses:
+        "200":
+          description: list of types
           content:
             application/json:
               schema:
@@ -2061,6 +2210,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Secret"
+
+  /connector-proxy/typeahead/{category}:
+    parameters:
+      - name: category
+        in: path
+        required: true
+        description: The category for the typeahead search
+        schema:
+          type: string
+      - name: prefix
+        in: query
+        required: true
+        description: The prefix to search for
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: true
+        description: The maximum number of search results
+        schema:
+          type: integer
+    get:
+      operationId: spiffworkflow_backend.routes.connector_proxy_controller.typeahead
+      summary: Return type ahead search results
+      tags:
+        - Type Ahead
+      responses:
+        "200":
+          description: We return type ahead search results
+          #content:
+          #  - application/json
 
 components:
   securitySchemes:
@@ -2312,15 +2492,7 @@ components:
         primary_process_id:
           type: string
           nullable: true
-        category_id:
-          type: string
-          nullable: true
-        workflow_spec_category:
-          $ref: "#/components/schemas/ProcessModelCategory"
-        is_status:
-          type: boolean
-          nullable: true
-    ProcessModelCategory:
+    ProcessGroup:
       properties:
         id:
           type: string
@@ -2328,12 +2500,6 @@ components:
           type: string
         display_name:
           type: string
-        display_order:
-          type: integer
-        workflows:
-          type: array
-          items:
-            $ref: "#/components/schemas/Workflow"
     File:
       properties:
         id:
@@ -2854,3 +3020,53 @@ components:
           description: The timestamp returned in the log
           type: number
           example: 123456789.12345
+
+    ProcessInstanceReport:
+      properties:
+        id:
+          type: number
+          nullable: true
+        identifier:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        report_metadata:
+          nullable: false
+          $ref: "#/components/schemas/ReportMetadata"
+    ReportMetadata:
+      properties:
+        columns:
+          type: array
+          nullable: false
+          $ref: "#/components/schemas/ReportMetadataColumn"
+        filter_by:
+          type: array
+          nullable: false
+          $ref: "#/components/schemas/FilterValue"
+        order_by:
+          type: array
+          nullable: false
+    ReportMetadataColumn:
+      properties:
+        Header:
+          type: string
+          nullable: false
+        accessor:
+          type: string
+          nullable: false
+        fiilterable:
+          type: boolean
+          nullable: true
+    FilterValue:
+      properties:
+        field_name:
+          type: string
+          nullable: false
+        field_value:
+          type: string
+          nullable: false
+        fiilterable:
+          type: string
+          nullable: false

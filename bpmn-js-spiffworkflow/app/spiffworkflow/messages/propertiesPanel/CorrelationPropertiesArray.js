@@ -37,7 +37,7 @@ export function CorrelationPropertiesArray(props) {
       });
       return {
         id,
-        label: correlationPropertyModdleElement.id,
+        label: correlationPropertyModdleElement.name,
         entries,
         autoFocusEntry: id,
         remove: removeFactory({
@@ -140,16 +140,6 @@ function MessageCorrelationPropertyGroup(props) {
       correlationPropertyModdleElement,
       translate,
       moddle,
-      commandStack,
-    },
-    {
-      id: `${idPrefix}-correlation-property-id`,
-      component: CorrelationPropertyIdTextField,
-      isEdited: isTextFieldEntryEdited,
-      idPrefix,
-      element,
-      correlationPropertyModdleElement,
-      translate,
       commandStack,
     },
     {
@@ -265,40 +255,6 @@ function MessageCorrelationKeySelect(props) {
   });
 }
 
-function CorrelationPropertyIdTextField(props) {
-  const {
-    id,
-    element,
-    correlationPropertyModdleElement,
-    commandStack,
-    translate,
-  } = props;
-
-  const debounce = useService('debounceInput');
-  const setValue = (value) => {
-    commandStack.execute('element.updateModdleProperties', {
-      element,
-      moddleElement: correlationPropertyModdleElement,
-      properties: {
-        id: value,
-      },
-    });
-  };
-
-  const getValue = () => {
-    return correlationPropertyModdleElement.id;
-  };
-
-  return TextFieldEntry({
-    element,
-    id: `${id}-id-textField`,
-    label: translate('ID'),
-    getValue,
-    setValue,
-    debounce,
-  });
-}
-
 function CorrelationPropertyNameTextField(props) {
   const {
     id,
@@ -315,6 +271,7 @@ function CorrelationPropertyNameTextField(props) {
       moddleElement: correlationPropertyModdleElement,
       properties: {
         name: value,
+        id: value,
       },
     });
   };

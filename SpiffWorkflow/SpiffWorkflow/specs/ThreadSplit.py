@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
-
-from builtins import range
 # Copyright (C) 2007 Samuel Abels
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -17,6 +16,7 @@ from builtins import range
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
+
 from ..task import TaskState
 from .base import TaskSpec
 from .ThreadStart import ThreadStart
@@ -108,31 +108,25 @@ class ThreadSplit(TaskSpec):
             new_task = my_task.add_child(output, TaskState.READY)
             new_task.triggered = True
 
-    def _predict_hook(self, my_task):
+    def _get_predicted_outputs(self, my_task):
         split_n = int(valueof(my_task, self.times))
+        return [self.thread_starter] * split_n
 
+    def _predict_hook(self, my_task):
         # if we were created with thread_starter suppressed, connect it now.
         if self.thread_starter is None:
             self.thread_starter = self.outputs[0]
 
-        # Predict the outputs.
-        outputs = []
-        for i in range(split_n):
-            outputs.append(self.thread_starter)
+        outputs = self._get_predicted_outputs(my_task)
         if my_task._is_definite():
             my_task._sync_children(outputs, TaskState.FUTURE)
         else:
             my_task._sync_children(outputs, TaskState.LIKELY)
 
-    def _on_complete_hook(self, my_task):
-        # Split, and remember the number of splits in the context data.
-        split_n = int(valueof(my_task, self.times))
-
-        # Create the outgoing tasks.
-        outputs = []
-        for i in range(split_n):
-            outputs.append(self.thread_starter)
+    def _run_hook(self, my_task):
+        outputs = self._get_predicted_outputs(my_task)
         my_task._sync_children(outputs, TaskState.FUTURE)
+        return True
 
     def serialize(self, serializer):
         return serializer.serialize_thread_split(self)

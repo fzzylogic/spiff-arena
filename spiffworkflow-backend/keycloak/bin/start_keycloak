@@ -26,9 +26,10 @@ fi
 
 # https://stackoverflow.com/a/60579344/6090676
 container_name="keycloak"
-if [[ -n "$(docker ps -qa -f name=$container_name)" ]]; then
+container_regex="^keycloak$"
+if [[ -n "$(docker ps -qa -f name=$container_regex)" ]]; then
   echo ":: Found container - $container_name"
-  if [[ -n "$(docker ps -q -f name=$container_name)" ]]; then
+  if [[ -n "$(docker ps -q -f name=$container_regex)" ]]; then
     echo ":: Stopping running container - $container_name"
     docker stop $container_name
   fi
@@ -51,8 +52,8 @@ docker run \
 
 script_dir="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 cp "${script_dir}/../realm_exports/${realm_name}-realm.json" /tmp/${realm_name}-realm.json
-spiff_subdomain="unused-for-local-dev"
-perl -pi -e "s/{{SPIFF_SUBDOMAIN}}/${spiff_subdomain}/g" /tmp/${realm_name}-realm.json
+spiff_subdomain="for-local-dev.spiffworkflow.org"
+perl -pi -e "s/replace-me-with-spiff-backend-host-and-path/${spiff_subdomain}/g" /tmp/${realm_name}-realm.json
 docker cp /tmp/${realm_name}-realm.json keycloak:/tmp
 
 sleep 20

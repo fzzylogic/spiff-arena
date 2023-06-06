@@ -24,13 +24,12 @@ RUN cp /app/package.json.bak /app/package.json
 # npx can-i-ignore-scripts can check that it's safe to ignore scripts.
 RUN npm ci --ignore-scripts
 
-RUN npm run build
+RUN ./bin/build
 
 # Final image without setup dependencies.
 FROM base AS final
 
-LABEL source="https://github.com/sartography/spiff-arena"
-LABEL description="Software development platform for building, running, and monitoring executable diagrams"
+LABEL description="Frontend component of SpiffWorkflow, a software development platform for building, running, and monitoring executable diagrams"
 
 # WARNING: On localhost frontend assumes backend is one port lowe.
 ENV PORT0=7001

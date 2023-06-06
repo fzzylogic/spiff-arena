@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
-
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -14,6 +14,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
+
 import json
 import uuid
 from ..operators import Attrib
@@ -22,24 +23,20 @@ from .dict import DictionarySerializer
 class JSONSerializer(DictionarySerializer):
 
     def serialize_workflow_spec(self, wf_spec, **kwargs):
-        thedict = super(JSONSerializer, self).serialize_workflow_spec(
-            wf_spec, **kwargs)
+        thedict = super(JSONSerializer, self).serialize_workflow_spec(wf_spec, **kwargs)
         return self._dumps(thedict)
 
     def deserialize_workflow_spec(self, s_state, **kwargs):
         thedict = self._loads(s_state)
-        return super(JSONSerializer, self).deserialize_workflow_spec(
-            thedict, **kwargs)
+        return super(JSONSerializer, self).deserialize_workflow_spec(thedict, **kwargs)
 
     def serialize_workflow(self, workflow, **kwargs):
-        thedict = super(JSONSerializer, self).serialize_workflow(
-            workflow, **kwargs)
+        thedict = super(JSONSerializer, self).serialize_workflow(workflow, **kwargs)
         return self._dumps(thedict)
 
     def deserialize_workflow(self, s_state, **kwargs):
         thedict = self._loads(s_state)
-        return super(JSONSerializer, self).deserialize_workflow(
-            thedict, **kwargs)
+        return super(JSONSerializer, self).deserialize_workflow(thedict, **kwargs)
 
     def _object_hook(self, dct):
         if '__uuid__' in dct:

@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
-
-from builtins import range
 # Copyright (C) 2007 Samuel Abels
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -17,6 +16,7 @@ from builtins import range
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
+
 from ..task import TaskState
 from .base import TaskSpec
 from ..operators import valueof
@@ -65,15 +65,14 @@ class Trigger(TaskSpec):
         self.queued += 1
         # All tasks that have already completed need to be put back to
         # READY.
-        for thetask in my_task.workflow.task_tree:
-            if thetask.thread_id != my_task.thread_id:
+        for task in my_task.workflow.task_tree:
+            if task.thread_id != my_task.thread_id:
                 continue
-            if (thetask.task_spec == self and
-                    thetask._has_state(TaskState.COMPLETED)):
-                thetask._set_state(TaskState.FUTURE)
-                thetask._ready()
+            if task.task_spec == self and task._has_state(TaskState.COMPLETED):
+                task._set_state(TaskState.FUTURE)
+                task._ready()
 
-    def _on_complete_hook(self, my_task):
+    def _run_hook(self, my_task):
         """
         A hook into _on_complete() that does the task specific work.
 
@@ -85,10 +84,10 @@ class Trigger(TaskSpec):
         times = int(valueof(my_task, self.times, 1)) + self.queued
         for i in range(times):
             for task_name in self.context:
-                task = my_task.workflow.get_task_spec_from_name(task_name)
-                task._on_trigger(my_task)
+                task_spec = my_task.workflow.get_task_spec_from_name(task_name)
+                task_spec._on_trigger(my_task)
         self.queued = 0
-        TaskSpec._on_complete_hook(self, my_task)
+        return True
 
     def serialize(self, serializer):
         return serializer.serialize_trigger(self)

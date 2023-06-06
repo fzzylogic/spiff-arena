@@ -1,6 +1,6 @@
-"""Custom_parser."""
 from SpiffWorkflow.dmn.parser.BpmnDmnParser import BpmnDmnParser  # type: ignore
 from SpiffWorkflow.spiff.parser.process import SpiffBpmnParser  # type: ignore
+from spiffworkflow_backend.specs.start_event import StartEvent
 
 from spiffworkflow_backend.data_stores.secret_data_store import SecretDataStore
 
@@ -15,3 +15,5 @@ class MyCustomParser(BpmnDmnParser):  # type: ignore
     DATA_STORE_CLASSES = {
         "SomeDataStore": SecretDataStore,
     }
+
+    StartEvent.register_parser_class(OVERRIDE_PARSER_CLASSES)

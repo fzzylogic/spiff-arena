@@ -1,13 +1,12 @@
 import unittest
 
-from SpiffWorkflow.camunda.specs.UserTask import FormField, UserTask, Form, EnumFormField
+from SpiffWorkflow.camunda.specs.user_task import FormField, UserTask, Form, EnumFormField
 from SpiffWorkflow.camunda.serializer.task_spec import UserTaskConverter
 from SpiffWorkflow.bpmn.serializer.helpers.dictionary import DictionaryConverter
 from SpiffWorkflow.specs.WorkflowSpec import WorkflowSpec
 
 
 class UserTaskSpecTest(unittest.TestCase):
-    CORRELATE = UserTask
 
     def create_instance(self):
         if 'testtask' in self.wf_spec.task_specs:
@@ -20,12 +19,11 @@ class UserTaskSpecTest(unittest.TestCase):
         self.user_spec = self.create_instance()
 
     def testConstructor(self):
-        self.assertEquals(self.user_spec.name, 'userTask')
+        self.assertEqual(self.user_spec.name, 'userTask')
         self.assertEqual(self.user_spec.data, {})
         self.assertEqual(self.user_spec.defines, {})
         self.assertEqual(self.user_spec.pre_assign, [])
         self.assertEqual(self.user_spec.post_assign, [])
-        self.assertEqual(self.user_spec.locks, [])
 
     def test_set_form(self):
         self.assertEqual(self.form, self.user_spec.form)
@@ -123,12 +121,4 @@ class UserTaskSpecTest(unittest.TestCase):
         self.assertEquals("rubble", form_field.get_validation("barney"))
 
     def testIsEngineTask(self):
-        self.assertFalse(self.user_spec.is_engine_task())
-
-
-def suite():
-    return unittest.TestLoader().loadTestsFromTestCase(UserTaskSpecTest)
-
-
-if __name__ == '__main__':
-    unittest.TextTestRunner(verbosity=2).run(suite())
+        self.assertTrue(self.user_spec.manual)

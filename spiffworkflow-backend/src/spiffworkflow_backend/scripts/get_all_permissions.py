@@ -1,4 +1,3 @@
-"""Get_env."""
 from collections import OrderedDict
 from typing import Any
 
@@ -6,17 +5,12 @@ from spiffworkflow_backend.models.group import GroupModel
 from spiffworkflow_backend.models.permission_assignment import PermissionAssignmentModel
 from spiffworkflow_backend.models.permission_target import PermissionTargetModel
 from spiffworkflow_backend.models.principal import PrincipalModel
-from spiffworkflow_backend.models.script_attributes_context import (
-    ScriptAttributesContext,
-)
+from spiffworkflow_backend.models.script_attributes_context import ScriptAttributesContext
 from spiffworkflow_backend.scripts.script import Script
 
 
 class GetAllPermissions(Script):
-    """GetAllPermissions."""
-
     def get_description(self) -> str:
-        """Get_description."""
         return """Get all permissions currently in the system."""
 
     def run(
@@ -25,7 +19,6 @@ class GetAllPermissions(Script):
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        """Run."""
         permission_assignments = (
             PermissionAssignmentModel.query.join(
                 PrincipalModel,
@@ -34,8 +27,7 @@ class GetAllPermissions(Script):
             .join(GroupModel, GroupModel.id == PrincipalModel.group_id)
             .join(
                 PermissionTargetModel,
-                PermissionTargetModel.id
-                == PermissionAssignmentModel.permission_target_id,
+                PermissionTargetModel.id == PermissionAssignmentModel.permission_target_id,
             )
             .add_columns(
                 PermissionAssignmentModel.permission,
@@ -46,19 +38,15 @@ class GetAllPermissions(Script):
 
         permissions: OrderedDict[tuple[str, str], list[str]] = OrderedDict()
         for pa in permission_assignments:
-            permissions.setdefault((pa.group_identifier, pa.uri), []).append(
-                pa.permission
-            )
+            permissions.setdefault((pa.group_identifier, pa.uri), []).append(pa.permission)
 
         def replace_suffix(string: str, old: str, new: str) -> str:
-            """Replace_suffix."""
             if string.endswith(old):
                 return string[: -len(old)] + new
             return string
 
         # sort list of strings based on a specific order
         def sort_by_order(string_list: list, order: list) -> list:
-            """Sort_by_order."""
             return sorted(string_list, key=lambda x: order.index(x))
 
         return [

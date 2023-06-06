@@ -1,20 +1,22 @@
-# -*- coding: utf-8 -*-
-
 # Copyright (C) 2007 Samuel Abels
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301  USA
+
 import logging
 
 from .base import TaskSpec
@@ -51,9 +53,12 @@ class Transform(TaskSpec):
         self.transforms = transforms
 
     def _update_hook(self, my_task):
+
+        super()._update_hook(my_task)
+
         if self.transforms:
             for transform in self.transforms:
-                logger.debug(f'Execute transform', extra=my_task.log_info({'transform': transform}))
+                logger.debug('Execute transform', extra=my_task.log_info({'transform': transform}))
                 exec(transform)
         return True
 

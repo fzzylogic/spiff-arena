@@ -21,7 +21,7 @@ except ImportError:
 
 
 package = "spiffworkflow_backend"
-python_versions = ["3.11", "3.10", "3.9"]
+python_versions = ["3.11", "3.10"]
 nox.needs_version = ">= 2021.6.6"
 nox.options.sessions = (
     "pre-commit",
@@ -36,13 +36,23 @@ nox.options.sessions = (
 
 def setup_database(session: Session) -> None:
     """Run database migrations against the database."""
-    session.env["FLASK_INSTANCE_PATH"] = os.path.join(
-        os.getcwd(), "instance", "testing"
-    )
+    session.env["FLASK_INSTANCE_PATH"] = os.path.join(os.getcwd(), "instance", "testing")
     flask_env_key = "FLASK_SESSION_SECRET_KEY"
-    session.env[flask_env_key] = "super_secret_key"
+    session.env[flask_env_key] = "e7711a3ba96c46c68e084a86952de16f"
     session.env["FLASK_APP"] = "src/spiffworkflow_backend"
     session.env["SPIFFWORKFLOW_BACKEND_ENV"] = "unit_testing"
+
+    if os.environ.get("SPIFFWORKFLOW_BACKEND_DATABASE_TYPE") == "sqlite":
+        # maybe replace this sqlite-specific block with ./bin/recreate_db clean rmall
+        # (if we can make it work, since it uses poetry),
+        # which would also remove the migrations folder and re-create things as a single migration
+        if os.path.exists("migrations"):
+            import shutil
+
+            shutil.rmtree("migrations")
+        for task in ["init", "migrate"]:
+            session.run("flask", "db", task)
+
     session.run("flask", "db", "upgrade")
 
 
@@ -72,9 +82,7 @@ def activate_virtualenv_in_precommit_hooks(session: Session) -> None:
 
         text = hook.read_text()
         bindir = repr(session.bin)[1:-1]  # strip quotes
-        if not (
-            Path("A") == Path("a") and bindir.lower() in text.lower() or bindir in text
-        ):
+        if not (Path("A") == Path("a") and bindir.lower() in text.lower() or bindir in text):
             continue
 
         lines = text.splitlines()

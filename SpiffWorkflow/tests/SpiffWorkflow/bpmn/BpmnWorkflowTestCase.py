@@ -8,13 +8,12 @@ from SpiffWorkflow.bpmn.parser.BpmnParser import BpmnValidator
 from SpiffWorkflow.task import TaskState
 
 from SpiffWorkflow.bpmn.serializer.workflow import BpmnWorkflowSerializer, DEFAULT_SPEC_CONFIG
-from SpiffWorkflow.bpmn.serializer.task_spec import UserTaskConverter
-from .BpmnLoaderForTests import TestUserTaskConverter, TestBpmnParser
+from .BpmnLoaderForTests import TestUserTaskConverter, TestBpmnParser, TestDataStoreConverter
 
 __author__ = 'matth'
 
 DEFAULT_SPEC_CONFIG['task_specs'].append(TestUserTaskConverter)
-
+DEFAULT_SPEC_CONFIG['task_specs'].append(TestDataStoreConverter)
 
 wf_spec_converter = BpmnWorkflowSerializer.configure_workflow_spec_converter(spec_config=DEFAULT_SPEC_CONFIG)
 
@@ -65,16 +64,16 @@ class BpmnWorkflowTestCase(unittest.TestCase):
         def switch_workflow(p):
             for task_id, sp in p.workflow._get_outermost_workflow().subprocesses.items():
                 if p in sp.get_tasks(workflow=sp):
-                    return p.workflow.get_task(task_id)
+                    return p.workflow.get_task_from_id(task_id)
 
         def is_match(t):
-            if not (t.task_spec.name == step_name_path[-1] or t.task_spec.description == step_name_path[-1]):
+            if not (t.task_spec.name == step_name_path[-1] or t.task_spec.bpmn_name == step_name_path[-1]):
                 return False
             for parent_name in step_name_path[:-1]:
                 p = t.parent
                 found = False
                 while (p and p != p.parent):
-                    if (p.task_spec.name == parent_name or p.task_spec.description == parent_name):
+                    if (p.task_spec.name == parent_name or p.task_spec.bpmn_name == parent_name):
                         found = True
                         break
                     if p.parent is None and p.workflow != p.workflow.outer_workflow:
@@ -85,15 +84,14 @@ class BpmnWorkflowTestCase(unittest.TestCase):
                     return False
             return True
 
-        tasks = list(
-            [t for t in self.workflow.get_tasks(TaskState.READY) if is_match(t)])
+        tasks = [t for t in self.workflow.get_tasks(TaskState.READY) if is_match(t)]
 
         self._do_single_step(
             step_name_path[-1], tasks, set_attribs, choice, only_one_instance=only_one_instance)
 
     def assertTaskNotReady(self, step_name):
         tasks = list([t for t in self.workflow.get_tasks(TaskState.READY)
-                     if t.task_spec.name == step_name or t.task_spec.description == step_name])
+                     if t.task_spec.name == step_name or t.task_spec.bpmn_name == step_name])
         self.assertEqual([], tasks)
 
     def _do_single_step(self, step_name, tasks, set_attribs=None, choice=None, only_one_instance=True):
@@ -107,8 +105,8 @@ class BpmnWorkflowTestCase(unittest.TestCase):
 
         self.assertTrue(
             tasks[0].task_spec.name == step_name or tasks[
-                0].task_spec.description == step_name,
-                       'Expected step %s, got %s (%s)' % (step_name, tasks[0].task_spec.description, tasks[0].task_spec.name))
+                0].task_spec.bpmn_name == step_name,
+                       'Expected step %s, got %s (%s)' % (step_name, tasks[0].task_spec.bpmn_name, tasks[0].task_spec.name))
         if not set_attribs:
             set_attribs = {}
 
@@ -117,10 +115,18 @@ class BpmnWorkflowTestCase(unittest.TestCase):
 
         if set_attribs:
             tasks[0].set_data(**set_attribs)
-        tasks[0].complete()
+        tasks[0].run()
+
+    def complete_subworkflow(self):
+        # A side effect of finer grained contol over task execution is that tasks require more explicit intervention
+        # to change states.  Subworkflows tasks no longer go directly to ready when the subworkflow completes.
+        # So they may need to explicitly refreshed to become ready, and then run.
+        self.workflow.refresh_waiting_tasks()
+        self.workflow.do_engine_steps()
 
     def save_restore(self):
 
+        script_engine = self.workflow.script_engine
         before_state = self._get_workflow_state(do_steps=False)
         before_dump = self.workflow.get_dump()
         # Check that we can actully convert this to JSON
@@ -133,6 +139,7 @@ class BpmnWorkflowTestCase(unittest.TestCase):
         self.assertEqual(before_dump, after_dump)
         self.assertEqual(before_state, after_state)
         self.workflow = after
+        self.workflow.script_engine = script_engine
 
     def restore(self, state):
         self.workflow = self.serializer.workflow_from_dict(state)

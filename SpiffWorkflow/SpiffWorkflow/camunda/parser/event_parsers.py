@@ -1,11 +1,32 @@
-from SpiffWorkflow.bpmn.parser.event_parsers import EventDefinitionParser
-from SpiffWorkflow.bpmn.parser.event_parsers import StartEventParser, EndEventParser, \
-    IntermediateCatchEventParser, IntermediateThrowEventParser, BoundaryEventParser
-from SpiffWorkflow.camunda.specs.events.event_definitions import MessageEventDefinition
+# Copyright (C) 2023 Sartography
+#
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 3.0 of the License, or (at your option) any later version.
+#
+# SpiffWorkflow is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301  USA
+
+from SpiffWorkflow.bpmn.parser.event_parsers import (
+    EventDefinitionParser,
+    StartEventParser,
+    EndEventParser,
+    IntermediateCatchEventParser,
+    IntermediateThrowEventParser,
+    BoundaryEventParser
+)
+from SpiffWorkflow.camunda.specs.event_definitions import MessageEventDefinition
 from SpiffWorkflow.bpmn.parser.util import one
-
-
-CAMUNDA_MODEL_NS = 'http://camunda.org/schema/1.0/bpmn'
 
 
 class CamundaEventDefinitionParser(EventDefinitionParser):
@@ -22,8 +43,8 @@ class CamundaEventDefinitionParser(EventDefinitionParser):
             name = message_event.getparent().get('name')
             correlations = {}
 
-        payload = message_event.attrib.get('{' + CAMUNDA_MODEL_NS + '}expression')
-        result_var = message_event.attrib.get('{' + CAMUNDA_MODEL_NS + '}resultVariable')
+        payload = self.attribute('expression', 'camunda', message_event)
+        result_var = self.attribute('resultVariable', 'camunda', message_event)
         return MessageEventDefinition(name, correlations, payload, result_var)
 
 

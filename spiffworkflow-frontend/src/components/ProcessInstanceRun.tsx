@@ -94,12 +94,12 @@ export default function ProcessInstanceRun({
   const { ability } = usePermissionFetcher(permissionRequestData);
 
   const onProcessInstanceRun = (processInstance: any) => {
-    // FIXME: ensure that the task is actually for the current user as well
     const processInstanceId = (processInstance as any).id;
-    const nextTask = (processInstance as any).next_task;
-    if (nextTask && nextTask.state === 'READY') {
-      navigate(`/tasks/${processInstanceId}/${nextTask.id}`);
-    }
+    navigate(
+      `/admin/process-instances/${modifyProcessIdentifierForPathParam(
+        processModel.id
+      )}/${processInstanceId}/interstitial`
+    );
     onSuccessCallback(processInstance);
   };
 
@@ -126,7 +126,11 @@ export default function ProcessInstanceRun({
   if (checkPermissions) {
     return (
       <Can I="POST" a={processInstanceCreatePath} ability={ability}>
-        <Button onClick={processInstanceCreateAndRun} className={className}>
+        <Button
+          data-qa="start-process-instance"
+          onClick={processInstanceCreateAndRun}
+          className={className}
+        >
           Start
         </Button>
       </Can>

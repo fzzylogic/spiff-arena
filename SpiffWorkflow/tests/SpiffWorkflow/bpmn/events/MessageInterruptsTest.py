@@ -4,7 +4,7 @@ import unittest
 
 from SpiffWorkflow.task import TaskState
 from SpiffWorkflow.bpmn.workflow import BpmnWorkflow
-from SpiffWorkflow.bpmn.specs.events.event_definitions import MessageEventDefinition
+from SpiffWorkflow.bpmn.specs.event_definitions import MessageEventDefinition
 from tests.SpiffWorkflow.bpmn.BpmnWorkflowTestCase import BpmnWorkflowTestCase
 
 __author__ = 'matth'
@@ -13,7 +13,10 @@ __author__ = 'matth'
 class MessageInterruptsTest(BpmnWorkflowTestCase):
 
     def setUp(self):
-        self.spec, self.subprocesses = self.load_workflow_spec('Test-Workflows/*.bpmn20.xml', 'Test Workflows', False)
+        self.spec, self.subprocesses = self.load_workflow_spec(
+            'Test-Workflows/*.bpmn20.xml', 
+            'sid-b0903a88-fe74-4f93-b912-47b815ea8d1c',
+            False)
 
     def testRunThroughHappySaveAndRestore(self):
 
@@ -30,13 +33,13 @@ class MessageInterruptsTest(BpmnWorkflowTestCase):
         self.save_restore()
 
         self.workflow.do_engine_steps()
+        self.complete_subworkflow()
         self.assertEqual(0, len(self.workflow.get_tasks(TaskState.WAITING)))
 
         self.save_restore()
 
         self.workflow.do_engine_steps()
-        self.assertEqual(
-            0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
+        self.assertEqual(0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
 
     def testRunThroughMessageInterruptSaveAndRestore(self):
 
@@ -61,9 +64,9 @@ class MessageInterruptsTest(BpmnWorkflowTestCase):
         self.save_restore()
 
         self.workflow.do_engine_steps()
+        self.complete_subworkflow()
         self.save_restore()
-        self.assertEqual(
-            0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
+        self.assertEqual(0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
 
     def testRunThroughHappy(self):
 
@@ -77,11 +80,11 @@ class MessageInterruptsTest(BpmnWorkflowTestCase):
         self.do_next_exclusive_step('Do Something That Takes A Long Time')
 
         self.workflow.do_engine_steps()
+        self.complete_subworkflow()
         self.assertEqual(0, len(self.workflow.get_tasks(TaskState.WAITING)))
 
         self.workflow.do_engine_steps()
-        self.assertEqual(
-            0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
+        self.assertEqual(0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
 
     def testRunThroughMessageInterrupt(self):
 
@@ -101,8 +104,8 @@ class MessageInterruptsTest(BpmnWorkflowTestCase):
         self.do_next_exclusive_step('Acknowledge Interrupt Message')
 
         self.workflow.do_engine_steps()
-        self.assertEqual(
-            0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
+        self.complete_subworkflow()
+        self.assertEqual(0, len(self.workflow.get_tasks(TaskState.READY | TaskState.WAITING)))
 
 
 def suite():

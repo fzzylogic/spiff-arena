@@ -1,42 +1,41 @@
-"""Base_test."""
 import io
 import json
 import os
 import time
 from typing import Any
-from typing import Dict
-from typing import Optional
 
 from flask import current_app
 from flask.testing import FlaskClient
-from tests.spiffworkflow_backend.helpers.test_data import load_test_spec
-from werkzeug.test import TestResponse  # type: ignore
-
 from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.models.db import db
+from spiffworkflow_backend.models.message_instance import MessageInstanceModel
 from spiffworkflow_backend.models.permission_assignment import Permission
 from spiffworkflow_backend.models.permission_target import PermissionTargetModel
 from spiffworkflow_backend.models.process_group import ProcessGroup
 from spiffworkflow_backend.models.process_group import ProcessGroupSchema
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModel
+from spiffworkflow_backend.models.process_instance_report import ReportMetadata
 from spiffworkflow_backend.models.process_model import NotificationType
 from spiffworkflow_backend.models.process_model import ProcessModelInfo
 from spiffworkflow_backend.models.process_model import ProcessModelInfoSchema
 from spiffworkflow_backend.models.user import UserModel
 from spiffworkflow_backend.services.authorization_service import AuthorizationService
 from spiffworkflow_backend.services.file_system_service import FileSystemService
+from spiffworkflow_backend.services.process_instance_processor import ProcessInstanceProcessor
+from spiffworkflow_backend.services.process_instance_queue_service import ProcessInstanceQueueService
+from spiffworkflow_backend.services.process_instance_service import ProcessInstanceService
 from spiffworkflow_backend.services.process_model_service import ProcessModelService
 from spiffworkflow_backend.services.user_service import UserService
+from werkzeug.test import TestResponse  # type: ignore
+
+from tests.spiffworkflow_backend.helpers.test_data import load_test_spec
 
 # from tests.spiffworkflow_backend.helpers.test_data import logged_in_headers
 
 
 class BaseTest:
-    """BaseTest."""
-
     @staticmethod
     def find_or_create_user(username: str = "test_user_1") -> UserModel:
-        """Find_or_create_user."""
         user = UserModel.query.filter_by(username=username).first()
         if isinstance(user, UserModel):
             return user
@@ -51,20 +50,17 @@ class BaseTest:
         )
 
     @staticmethod
-    def logged_in_headers(
-        user: UserModel, _redirect_url: str = "http://some/frontend/url"
-    ) -> Dict[str, str]:
-        """Logged_in_headers."""
+    def logged_in_headers(user: UserModel, _redirect_url: str = "http://some/frontend/url") -> dict[str, str]:
         return dict(Authorization="Bearer " + user.encode_auth_token())
 
     def create_group_and_model_with_bpmn(
         self,
         client: FlaskClient,
         user: UserModel,
-        process_group_id: Optional[str] = "test_group",
-        process_model_id: Optional[str] = "random_fact",
-        bpmn_file_name: Optional[str] = None,
-        bpmn_file_location: Optional[str] = None,
+        process_group_id: str | None = "test_group",
+        process_model_id: str | None = "random_fact",
+        bpmn_file_name: str | None = None,
+        bpmn_file_location: str | None = None,
     ) -> str:
         """Creates a process group.
 
@@ -77,9 +73,7 @@ class BaseTest:
         if bpmn_file_location is None:
             bpmn_file_location = process_model_id
 
-        self.create_process_group(
-            client, user, process_group_description, process_group_display_name
-        )
+        self.create_process_group_with_api(client, user, process_group_description, process_group_display_name)
 
         self.create_process_model_with_api(
             client,
@@ -99,15 +93,20 @@ class BaseTest:
 
     def create_process_group(
         self,
+        process_group_id: str,
+        display_name: str = "",
+    ) -> ProcessGroup:
+        process_group = ProcessGroup(id=process_group_id, display_name=display_name, display_order=0, admin=False)
+        return ProcessModelService.add_process_group(process_group)
+
+    def create_process_group_with_api(
+        self,
         client: FlaskClient,
         user: Any,
         process_group_id: str,
         display_name: str = "",
     ) -> str:
-        """Create_process_group."""
-        process_group = ProcessGroup(
-            id=process_group_id, display_name=display_name, display_order=0, admin=False
-        )
+        process_group = ProcessGroup(id=process_group_id, display_name=display_name, display_order=0, admin=False)
         response = client.post(
             "/v1.0/process-groups",
             headers=self.logged_in_headers(user),
@@ -122,23 +121,20 @@ class BaseTest:
     def create_process_model_with_api(
         self,
         client: FlaskClient,
-        process_model_id: Optional[str] = None,
+        process_model_id: str | None = None,
         process_model_display_name: str = "Cooooookies",
         process_model_description: str = "Om nom nom delicious cookies",
         fault_or_suspend_on_exception: str = NotificationType.suspend.value,
-        exception_notification_addresses: Optional[list] = None,
-        primary_process_id: Optional[str] = None,
-        primary_file_name: Optional[str] = None,
-        user: Optional[UserModel] = None,
+        exception_notification_addresses: list | None = None,
+        primary_process_id: str | None = None,
+        primary_file_name: str | None = None,
+        user: UserModel | None = None,
     ) -> TestResponse:
-        """Create_process_model."""
         if process_model_id is not None:
             # make sure we have a group
             process_group_id, _ = os.path.split(process_model_id)
             modified_process_group_id = process_group_id.replace("/", ":")
-            process_group_path = os.path.abspath(
-                os.path.join(FileSystemService.root_path(), process_group_id)
-            )
+            process_group_path = os.path.abspath(os.path.join(FileSystemService.root_path(), process_group_id))
             if ProcessModelService.is_process_group(process_group_path):
                 if exception_notification_addresses is None:
                     exception_notification_addresses = []
@@ -168,15 +164,9 @@ class BaseTest:
             else:
                 raise Exception("You must create the group first")
         else:
-            raise Exception(
-                "You must include the process_model_id, which must be a path to the"
-                " model"
-            )
+            raise Exception("You must include the process_model_id, which must be a path to the model")
 
-    def get_test_data_file_full_path(
-        self, file_name: str, process_model_test_data_dir: str
-    ) -> str:
-        """Get_test_data_file_contents."""
+    def get_test_data_file_full_path(self, file_name: str, process_model_test_data_dir: str) -> str:
         return os.path.join(
             current_app.instance_path,
             "..",
@@ -187,13 +177,8 @@ class BaseTest:
             file_name,
         )
 
-    def get_test_data_file_contents(
-        self, file_name: str, process_model_test_data_dir: str
-    ) -> bytes:
-        """Get_test_data_file_contents."""
-        file_full_path = self.get_test_data_file_full_path(
-            file_name, process_model_test_data_dir
-        )
+    def get_test_data_file_contents(self, file_name: str, process_model_test_data_dir: str) -> bytes:
+        file_full_path = self.get_test_data_file_full_path(file_name, process_model_test_data_dir)
         with open(file_full_path, "rb") as file:
             return file.read()
 
@@ -201,11 +186,11 @@ class BaseTest:
         self,
         client: FlaskClient,
         process_model_id: str,
-        process_model_location: Optional[str] = None,
-        process_model: Optional[ProcessModelInfo] = None,
+        process_model_location: str | None = None,
+        process_model: ProcessModelInfo | None = None,
         file_name: str = "random_fact.svg",
         file_data: bytes = b"abcdef",
-        user: Optional[UserModel] = None,
+        user: UserModel | None = None,
     ) -> Any:
         """Test_create_spec_file.
 
@@ -253,7 +238,7 @@ class BaseTest:
     def create_process_instance_from_process_model_id_with_api(
         client: FlaskClient,
         test_process_model_id: str,
-        headers: Dict[str, str],
+        headers: dict[str, str],
     ) -> TestResponse:
         """Create_process_instance.
 
@@ -289,10 +274,9 @@ class BaseTest:
     def create_process_instance_from_process_model(
         self,
         process_model: ProcessModelInfo,
-        status: Optional[str] = "not_started",
-        user: Optional[UserModel] = None,
+        status: str | None = "not_started",
+        user: UserModel | None = None,
     ) -> ProcessInstanceModel:
-        """Create_process_instance_from_process_model."""
         if user is None:
             user = self.find_or_create_user()
 
@@ -308,6 +292,10 @@ class BaseTest:
         )
         db.session.add(process_instance)
         db.session.commit()
+
+        run_at_in_seconds = round(time.time())
+        ProcessInstanceQueueService.enqueue_new_process_instance(process_instance, run_at_in_seconds)
+
         return process_instance
 
     @classmethod
@@ -315,25 +303,19 @@ class BaseTest:
         cls,
         username: str,
         target_uri: str = PermissionTargetModel.URI_ALL,
-        permission_names: Optional[list[str]] = None,
+        permission_names: list[str] | None = None,
     ) -> UserModel:
-        """Create_user_with_permission."""
         user = BaseTest.find_or_create_user(username=username)
-        return cls.add_permissions_to_user(
-            user, target_uri=target_uri, permission_names=permission_names
-        )
+        return cls.add_permissions_to_user(user, target_uri=target_uri, permission_names=permission_names)
 
     @classmethod
     def add_permissions_to_user(
         cls,
         user: UserModel,
         target_uri: str = PermissionTargetModel.URI_ALL,
-        permission_names: Optional[list[str]] = None,
+        permission_names: list[str] | None = None,
     ) -> UserModel:
-        """Add_permissions_to_user."""
-        permission_target = AuthorizationService.find_or_create_permission_target(
-            target_uri
-        )
+        permission_target = AuthorizationService.find_or_create_permission_target(target_uri)
 
         if permission_names is None:
             permission_names = [member.name for member in Permission]
@@ -353,7 +335,6 @@ class BaseTest:
         target_uri: str,
         expected_result: bool = True,
     ) -> None:
-        """Assert_user_has_permission."""
         has_permission = AuthorizationService.user_has_permission(
             user=user,
             permission=permission,
@@ -362,11 +343,109 @@ class BaseTest:
         assert has_permission is expected_result
 
     def modify_process_identifier_for_path_param(self, identifier: str) -> str:
-        """Modify_process_identifier_for_path_param."""
         return ProcessModelInfo.modify_process_identifier_for_path_param(identifier)
 
-    def un_modify_modified_process_identifier_for_path_param(
-        self, modified_identifier: str
-    ) -> str:
-        """Un_modify_modified_process_model_id."""
+    def un_modify_modified_process_identifier_for_path_param(self, modified_identifier: str) -> str:
         return modified_identifier.replace(":", "/")
+
+    def create_process_model_with_metadata(self) -> ProcessModelInfo:
+        self.create_process_group("test_group", "test_group")
+        process_model = load_test_spec(
+            "test_group/hello_world",
+            process_model_source_directory="nested-task-data-structure",
+        )
+        ProcessModelService.update_process_model(
+            process_model,
+            {
+                "metadata_extraction_paths": [
+                    {"key": "awesome_var", "path": "outer.inner"},
+                    {"key": "invoice_number", "path": "invoice_number"},
+                ]
+            },
+        )
+        return process_model
+
+    def post_to_process_instance_list(
+        self,
+        client: FlaskClient,
+        user: UserModel,
+        report_metadata: ReportMetadata | None = None,
+        param_string: str | None = "",
+    ) -> TestResponse:
+        report_metadata_to_use = report_metadata
+        if report_metadata_to_use is None:
+            report_metadata_to_use = self.empty_report_metadata_body()
+        response = client.post(
+            f"/v1.0/process-instances{param_string}",
+            headers=self.logged_in_headers(user),
+            content_type="application/json",
+            data=json.dumps({"report_metadata": report_metadata_to_use}),
+        )
+        assert response.status_code == 200
+        assert response.json is not None
+        return response
+
+    def empty_report_metadata_body(self) -> ReportMetadata:
+        return {"filter_by": [], "columns": [], "order_by": []}
+
+    def start_sender_process(
+        self,
+        client: FlaskClient,
+        payload: dict,
+        group_name: str = "test_group",
+    ) -> ProcessInstanceModel:
+        process_model = load_test_spec(
+            "test_group/message",
+            process_model_source_directory="message_send_one_conversation",
+            bpmn_file_name="message_sender.bpmn",  # Slightly misnamed, it sends and receives
+        )
+
+        process_instance = self.create_process_instance_from_process_model(process_model)
+        processor_send_receive = ProcessInstanceProcessor(process_instance)
+        processor_send_receive.do_engine_steps(save=True)
+        task = processor_send_receive.get_all_user_tasks()[0]
+        human_task = process_instance.active_human_tasks[0]
+
+        ProcessInstanceService.complete_form_task(
+            processor_send_receive,
+            task,
+            payload,
+            process_instance.process_initiator,
+            human_task,
+        )
+        processor_send_receive.save()
+        return process_instance
+
+    def assure_a_message_was_sent(self, process_instance: ProcessInstanceModel, payload: dict) -> None:
+        # There should be one new send message for the given process instance.
+        send_messages = (
+            MessageInstanceModel.query.filter_by(message_type="send")
+            .filter_by(process_instance_id=process_instance.id)
+            .order_by(MessageInstanceModel.id)
+            .all()
+        )
+        assert len(send_messages) == 1
+        send_message = send_messages[0]
+        assert send_message.payload == payload, "The send message should match up with the payload"
+        assert send_message.name == "Request Approval"
+        assert send_message.status == "ready"
+
+    def assure_there_is_a_process_waiting_on_a_message(self, process_instance: ProcessInstanceModel) -> None:
+        # There should be one new send message for the given process instance.
+        waiting_messages = (
+            MessageInstanceModel.query.filter_by(message_type="receive")
+            .filter_by(status="ready")
+            .filter_by(process_instance_id=process_instance.id)
+            .order_by(MessageInstanceModel.id)
+            .all()
+        )
+        assert len(waiting_messages) == 1
+        waiting_message = waiting_messages[0]
+        self.assure_correlation_properties_are_right(waiting_message)
+
+    def assure_correlation_properties_are_right(self, message: MessageInstanceModel) -> None:
+        # Correlation Properties should match up
+        po_curr = next(c for c in message.correlation_rules if c.name == "po_number")
+        customer_curr = next(c for c in message.correlation_rules if c.name == "customer_id")
+        assert po_curr is not None
+        assert customer_curr is not None

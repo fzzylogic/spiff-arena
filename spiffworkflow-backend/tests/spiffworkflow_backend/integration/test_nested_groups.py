@@ -1,23 +1,18 @@
-"""Test_nested_groups."""
 import json
 
 from flask.app import Flask
 from flask.testing import FlaskClient
-from tests.spiffworkflow_backend.helpers.base_test import BaseTest
-
 from spiffworkflow_backend.models.process_group import ProcessGroup
 from spiffworkflow_backend.models.process_group import ProcessGroupSchema
 from spiffworkflow_backend.models.process_model import ProcessModelInfo
 from spiffworkflow_backend.models.process_model import ProcessModelInfoSchema
 from spiffworkflow_backend.models.user import UserModel
-from spiffworkflow_backend.services.process_instance_service import (
-    ProcessInstanceService,
-)
+from spiffworkflow_backend.services.process_instance_service import ProcessInstanceService
+
+from tests.spiffworkflow_backend.helpers.base_test import BaseTest
 
 
 class TestNestedGroups(BaseTest):
-    """TestNestedGroups."""
-
     def test_delete_group_with_running_instance(
         self,
         app: Flask,
@@ -25,7 +20,6 @@ class TestNestedGroups(BaseTest):
         with_db_and_bpmn_file_cleanup: None,
         with_super_admin_user: UserModel,
     ) -> None:
-        """Test_delete_group_with_running_instance."""
         process_group_id = "test_group"
         process_model_id = "manual_task"
         bpmn_file_name = "manual_task.bpmn"
@@ -49,9 +43,7 @@ class TestNestedGroups(BaseTest):
             f"/v1.0/process-instances/{self.modify_process_identifier_for_path_param(process_model_identifier)}/{process_instance_id}/run",
             headers=self.logged_in_headers(with_super_admin_user),
         )
-        process_instance = ProcessInstanceService().get_process_instance(
-            process_instance_id
-        )
+        process_instance = ProcessInstanceService().get_process_instance(process_instance_id)
         assert process_instance
         modified_process_group_id = process_group_id.replace("/", ":")
         response = client.delete(
@@ -61,10 +53,7 @@ class TestNestedGroups(BaseTest):
         assert response.status_code == 400
         assert response.json["error_code"] == "existing_instances"
         assert "We cannot delete the group" in response.json["message"]
-        assert (
-            "there are models with existing instances inside the group"
-            in response.json["message"]
-        )
+        assert "there are models with existing instances inside the group" in response.json["message"]
 
     def test_delete_group_with_running_instance_in_nested_group(
         self,
@@ -73,7 +62,6 @@ class TestNestedGroups(BaseTest):
         with_db_and_bpmn_file_cleanup: None,
         with_super_admin_user: UserModel,
     ) -> None:
-        """Test_delete_group_with_running_instance_in_nested_group."""
         process_group_a = ProcessGroup(
             id="group_a",
             display_name="Group A",
@@ -110,9 +98,7 @@ class TestNestedGroups(BaseTest):
             f"/v1.0/process-instances/{process_instance_id}/run",
             headers=self.logged_in_headers(with_super_admin_user),
         )
-        process_instance = ProcessInstanceService().get_process_instance(
-            process_instance_id
-        )
+        process_instance = ProcessInstanceService().get_process_instance(process_instance_id)
         assert process_instance
         modified_process_group_id = process_group_id.replace("/", ":")
         response = client.delete(
@@ -122,10 +108,7 @@ class TestNestedGroups(BaseTest):
         assert response.status_code == 400
         assert response.json["error_code"] == "existing_instances"
         assert "We cannot delete the group" in response.json["message"]
-        assert (
-            "there are models with existing instances inside the group"
-            in response.json["message"]
-        )
+        assert "there are models with existing instances inside the group" in response.json["message"]
 
     def test_nested_groups(
         self,
@@ -133,16 +116,11 @@ class TestNestedGroups(BaseTest):
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
     ) -> None:
-        """Test_nested_groups."""
         # /process-groups/{process_group_path}/show
         target_uri = "/v1.0/process-groups/group_a,group_b"
         user = self.find_or_create_user()
-        self.add_permissions_to_user(
-            user, target_uri=target_uri, permission_names=["read"]
-        )
-        response = client.get(  # noqa: F841
-            target_uri, headers=self.logged_in_headers(user)
-        )
+        self.add_permissions_to_user(user, target_uri=target_uri, permission_names=["read"])
+        response = client.get(target_uri, headers=self.logged_in_headers(user))  # noqa: F841
 
     def test_add_nested_group(
         self,
@@ -151,7 +129,6 @@ class TestNestedGroups(BaseTest):
         with_db_and_bpmn_file_cleanup: None,
         with_super_admin_user: UserModel,
     ) -> None:
-        """Test_add_nested_group."""
         process_group_a = ProcessGroup(
             id="group_a",
             display_name="Group A",
@@ -196,7 +173,6 @@ class TestNestedGroups(BaseTest):
         with_db_and_bpmn_file_cleanup: None,
         with_super_admin_user: UserModel,
     ) -> None:
-        """Test_process_model_create."""
         process_group_a = ProcessGroup(
             id="group_a",
             display_name="Group A",
@@ -243,7 +219,6 @@ class TestNestedGroups(BaseTest):
         with_db_and_bpmn_file_cleanup: None,
         with_super_admin_user: UserModel,
     ) -> None:
-        """Test_process_group_show."""
         # target_uri = "/process-groups/{process_group_id}"
         # user = self.find_or_create_user("testadmin1")
         # self.add_permissions_to_user(
@@ -268,11 +243,7 @@ class TestNestedGroups(BaseTest):
 
         target_uri = "/v1.0/process-groups/group_a"
         user = self.find_or_create_user()
-        self.add_permissions_to_user(
-            user, target_uri=target_uri, permission_names=["read"]
-        )
-        response = client.get(  # noqa: F841
-            target_uri, headers=self.logged_in_headers(user)
-        )
+        self.add_permissions_to_user(user, target_uri=target_uri, permission_names=["read"])
+        response = client.get(target_uri, headers=self.logged_in_headers(user))  # noqa: F841
 
         print("test_process_group_show: ")

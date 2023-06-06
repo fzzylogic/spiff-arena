@@ -27,7 +27,7 @@ class PrescriptPostsciptTest(BaseTestCase):
         self.set_process_data({'b': 2})
         ready_tasks = self.workflow.get_tasks(TaskState.READY)
         # This execute the same script as task_test
-        ready_tasks[0].complete()
+        ready_tasks[0].run()
         # a should be removed, b should be unchanged, and c and z should be present (but not x & y)
         self.assertDictEqual({'b': 2, 'c': 12, 'z': 6}, ready_tasks[0].data)
 
@@ -43,7 +43,7 @@ class PrescriptPostsciptTest(BaseTestCase):
         # The prescript sets x, y = a * 2, b * 2 and creates the variable z = x + y
         # The postscript sets c = z * 2 and deletes x and y
         # a and b should remain unchanged, and c and z should be added
-        ready_tasks[0].complete()
+        ready_tasks[0].run()
         self.assertDictEqual({'a': 1, 'b': 2, 'c': 12, 'z': 6}, ready_tasks[0].data)
 
     def test_for_error(self, save_restore=False):
@@ -52,12 +52,14 @@ class PrescriptPostsciptTest(BaseTestCase):
         self.workflow = BpmnWorkflow(spec, subprocesses)
         if save_restore:
             self.save_restore()
-        ready_tasks = self.workflow.get_tasks(TaskState.READY)
+        self.workflow.get_tasks(TaskState.READY)
         # Calling do-engine steps without setting variables will raise an exception.
         with self.assertRaises(SpiffWorkflowException) as se:
             self.workflow.do_engine_steps()
         ex = se.exception
         self.assertIn("Error occurred in the Pre-Script", str(ex))
+        task = self.workflow.get_tasks_from_spec_name('Activity_1iqs4li')[0]
+        self.assertEqual(task.state, TaskState.ERROR)
 
     def call_activity_test(self, save_restore=False):
 
@@ -82,3 +84,4 @@ class PrescriptPostsciptTest(BaseTestCase):
         ready_tasks = self.workflow.get_tasks(TaskState.READY)
         ready_tasks[0].set_data(**data)
         self.workflow.do_engine_steps()
+        self.complete_subworkflow()

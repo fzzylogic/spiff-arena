@@ -1,4 +1,8 @@
 import {
+  Toggletip,
+  ToggletipButton,
+  ToggletipContent,
+  Button,
   Header,
   HeaderContainer,
   HeaderMenuButton,
@@ -25,6 +29,8 @@ import { useUriListForPermissions } from '../hooks/UriListForPermissions';
 import { PermissionsToCheck } from '../interfaces';
 import { usePermissionFetcher } from '../hooks/PermissionService';
 import { UnauthenticatedError } from '../services/HttpService';
+import { DOCUMENTATION_URL, SPIFF_ENVIRONMENT } from '../config';
+import appVersionInfo from '../helpers/appVersionInfo';
 
 // for ref: https://react-bootstrap.github.io/components/navbar/
 export default function NavigationBar() {
@@ -52,6 +58,15 @@ export default function NavigationBar() {
   };
   const { ability } = usePermissionFetcher(permissionRequestData);
 
+  // default to readthedocs and let someone specify an environment variable to override:
+  //
+  let documentationUrl = 'https://spiffworkflow.readthedocs.io';
+  if (DOCUMENTATION_URL) {
+    documentationUrl = DOCUMENTATION_URL;
+  }
+
+  const versionInfo = appVersionInfo();
+
   useEffect(() => {
     let newActiveKey = '/admin/process-groups';
     if (location.pathname.match(/^\/admin\/messages\b/)) {
@@ -76,20 +91,66 @@ export default function NavigationBar() {
     return activeKey === menuItemPath;
   };
 
+  let aboutLinkElement = null;
+
+  if (Object.keys(versionInfo).length) {
+    aboutLinkElement = <a href="/about">About</a>;
+  }
+
+  const userEmail = UserService.getUserEmail();
+  const username = UserService.getPreferredUsername();
+
+  const profileToggletip = (
+    <div style={{ display: 'flex' }} id="user-profile-toggletip">
+      <Toggletip isTabTip align="bottom-right">
+        <ToggletipButton
+          aria-label="User Actions"
+          className="user-profile-toggletip-button"
+          type="button"
+        >
+          <div className="user-circle">{username[0].toUpperCase()}</div>
+        </ToggletipButton>
+        <ToggletipContent className="user-profile-toggletip-content">
+          <p>
+            <strong>{username}</strong>
+          </p>
+          {username !== userEmail && <p>{userEmail}</p>}
+          <hr />
+          {aboutLinkElement}
+          <a target="_blank" href={documentationUrl} rel="noreferrer">
+            Documentation
+          </a>
+          {!UserService.authenticationDisabled() ? (
+            <>
+              <hr />
+              <Button
+                data-qa="logout-button"
+                className="button-link"
+                onClick={handleLogout}
+              >
+                <Logout />
+                &nbsp;&nbsp;Sign out
+              </Button>
+            </>
+          ) : null}
+        </ToggletipContent>
+      </Toggletip>
+    </div>
+  );
+
   const loginAndLogoutAction = () => {
     if (UserService.isLoggedIn()) {
       return (
         <>
-          <HeaderGlobalAction className="username-header-text">
-            {UserService.getPreferredUsername()}
-          </HeaderGlobalAction>
-          <HeaderGlobalAction
-            aria-label="Logout"
-            onClick={handleLogout}
-            data-qa="logout-button"
-          >
-            <Logout />
-          </HeaderGlobalAction>
+          {SPIFF_ENVIRONMENT ? (
+            <HeaderGlobalAction
+              title={`The current SpiffWorkflow environment is: ${SPIFF_ENVIRONMENT}`}
+              className="spiff-environment-header-text unclickable-text"
+            >
+              {SPIFF_ENVIRONMENT}
+            </HeaderGlobalAction>
+          ) : null}
+          {profileToggletip}
         </>
       );
     }

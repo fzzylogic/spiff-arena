@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
-
-from builtins import str
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -15,19 +14,16 @@ from builtins import str
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
-import re
+
 import warnings
 from lxml import etree
 from lxml.etree import SubElement
 from ..workflow import Workflow
-from .. import specs, operators
 from ..task import Task, TaskStateNames
-from ..operators import (Attrib, Assign, PathAttrib, Equal, NotEqual,
-                         GreaterThan, LessThan, Match)
+from ..operators import (Attrib, Assign, PathAttrib, Equal, NotEqual, GreaterThan, LessThan, Match)
 from ..specs.AcquireMutex import AcquireMutex
 from ..specs.Cancel import Cancel
 from ..specs.CancelTask import CancelTask
-from ..specs.Celery import Celery
 from ..specs.Choose import Choose
 from ..specs.ExclusiveChoice import ExclusiveChoice
 from ..specs.Execute import Execute
@@ -43,10 +39,8 @@ from ..specs.SubWorkflow import SubWorkflow
 from ..specs.ThreadStart import ThreadStart
 from ..specs.ThreadMerge import ThreadMerge
 from ..specs.ThreadSplit import ThreadSplit
-from ..specs.Transform import Transform
 from ..specs.Trigger import Trigger
 from ..specs.WorkflowSpec import WorkflowSpec
-from ..specs.LoopResetTask import LoopResetTask
 from .base import Serializer, spec_map, op_map
 from .exceptions import TaskNotSupportedError
 
@@ -292,15 +286,11 @@ class XmlSerializer(Serializer):
         """
         Serializes common attributes of :meth:`SpiffWorkflow.specs.TaskSpec`.
         """
-        if spec.id is not None:
-            SubElement(elem, 'id').text = str(spec.id)
         SubElement(elem, 'name').text = spec.name
         if spec.description:
             SubElement(elem, 'description').text = spec.description
         if spec.manual:
             SubElement(elem, 'manual')
-        if spec.internal:
-            SubElement(elem, 'internal')
         SubElement(elem, 'lookahead').text = str(spec.lookahead)
         inputs = [t.name for t in spec.inputs]
         outputs = [t.name for t in spec.outputs]
@@ -321,11 +311,8 @@ class XmlSerializer(Serializer):
     def deserialize_task_spec(self, wf_spec, elem, spec_cls, **kwargs):
         name = elem.findtext('name')
         spec = spec_cls(wf_spec, name, **kwargs)
-        theid = elem.findtext('id')
-        spec.id = theid if theid is not None else None
         spec.description = elem.findtext('description', spec.description)
         spec.manual = elem.findtext('manual', spec.manual)
-        spec.internal = elem.find('internal') is not None
         spec.lookahead = int(elem.findtext('lookahead', spec.lookahead))
 
         data_elem = elem.find('data')
@@ -388,37 +375,6 @@ class XmlSerializer(Serializer):
 
     def deserialize_cancel_task(self, wf_spec, elem, cls=CancelTask, **kwargs):
         return self.deserialize_trigger(wf_spec, elem, cls, **kwargs)
-
-    def serialize_celery(self, spec, elem=None):
-        if elem is None:
-            elem = etree.Element('celery')
-
-        SubElement(elem, 'call').text = spec.call
-        args_elem = SubElement(elem, 'args')
-        self.serialize_value_list(args_elem, spec.args)
-        kwargs_elem = SubElement(elem, 'kwargs')
-        self.serialize_value_map(kwargs_elem, spec.kwargs)
-        if spec.merge_results:
-            SubElement(elem, 'merge-results')
-        SubElement(elem, 'result-key').text = spec.result_key
-
-        return self.serialize_task_spec(spec, elem)
-
-    def deserialize_celery(self, wf_spec, elem, cls=Celery, **kwargs):
-        call = elem.findtext('call')
-        args = self.deserialize_value_list(elem.find('args'))
-        result_key = elem.findtext('call')
-        merge_results = elem.find('merge-results') is not None
-        spec = self.deserialize_task_spec(wf_spec,
-                                          elem,
-                                          cls,
-                                          call=call,
-                                          call_args=args,
-                                          result_key=result_key,
-                                          merge_results=merge_results,
-                                          **kwargs)
-        spec.kwargs = self.deserialize_value_map(elem.find('kwargs'))
-        return spec
 
     def serialize_choose(self, spec, elem=None):
         if elem is None:
@@ -531,7 +487,7 @@ class XmlSerializer(Serializer):
 
     def deserialize_multi_instance(self, wf_spec, elem, cls=None,
                                    **kwargs):
-        if cls == None:
+        if cls is None:
             cls = MultiInstance
             #cls = MultiInstance(wf_spec,elem.find('name'),elem.find('times'))
         times = self.deserialize_value(elem.find('times'))
@@ -726,30 +682,16 @@ class XmlSerializer(Serializer):
         workflow.task_tree = self.deserialize_task(workflow, task_tree_elem[0])
 
         # Re-connect parents
-        for task in workflow.get_tasks():
-            task.parent = workflow.get_task(task.parent)
+        for task in workflow.get_tasks_iterator():
+            if task.parent is not None:
+                task.parent = workflow.get_task_from_id(task.parent)
 
         # last_task
         last_task = elem.findtext('last-task')
         if last_task is not None:
-            workflow.last_task = workflow.get_task(last_task)
+            workflow.last_task = workflow.get_task_from_id(last_task)
 
         return workflow
-
-    def serialize_loop_reset_task(self, spec):
-        elem = etree.Element('loop-reset-task')
-        SubElement(elem, 'destination_id').text = str(spec.destination_id)
-        SubElement(elem, 'destination_spec_name').text = str(spec.destination_spec_name)
-        return self.serialize_task_spec(spec, elem)
-
-    def deserialize_loop_reset_task(self, wf_spec, elem, cls=LoopResetTask, **kwargs):
-        destination_id = elem.findtext('destination_id')
-        destination_spec_name = elem.findtext('destination_spec_name')
-
-        task = self.deserialize_task_spec(wf_spec, elem, cls,
-                                          destination_id=destination_id,
-                                          destination_spec_name=destination_spec_name)
-        return task
 
     def serialize_task(self, task, skip_children=False):
         assert isinstance(task, Task)

@@ -17,7 +17,7 @@ class StartMessageTest(BaseTestCase):
     def testParserCanReturnStartMessages(self):
         parser = self.get_parser('message_test.bpmn')
         self.assertEqual(
-            parser.process_parsers['ThrowCatch'].start_messages(), ['Message_1rkbi27'])
+            parser.process_parsers['ThrowCatch'].start_messages(), ['ApprovalRequest'])
 
         parser = self.get_parser('random_fact.bpmn')
         self.assertEqual(
@@ -48,7 +48,7 @@ class StartMessageTest(BaseTestCase):
             current_task = ready_tasks[0]
             self.assertEqual(current_task.task_spec.name,step[0])
             current_task.update_data(step[1])
-            current_task.complete()
+            current_task.run()
             self.workflow.do_engine_steps()
             self.workflow.refresh_waiting_tasks()
             if save_restore:

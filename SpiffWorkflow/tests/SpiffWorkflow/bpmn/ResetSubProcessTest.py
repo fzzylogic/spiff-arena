@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import unittest
-
 from SpiffWorkflow.bpmn.workflow import BpmnWorkflow
-from tests.SpiffWorkflow.bpmn.BpmnWorkflowTestCase import BpmnWorkflowTestCase
+from .BpmnWorkflowTestCase import BpmnWorkflowTestCase
 
 __author__ = 'matth'
 
@@ -32,16 +30,19 @@ class ResetSubProcessTest(BpmnWorkflowTestCase):
         self.actualTest(True)
 
     def testResetToOuterWorkflowWhileInSubWorkflow(self):
-        
+
         self.workflow.do_engine_steps()
         top_level_task = self.workflow.get_ready_user_tasks()[0]
-        self.workflow.complete_task_from_id(top_level_task.id)
+        top_level_task.run()
         self.workflow.do_engine_steps()
         task = self.workflow.get_ready_user_tasks()[0]
         self.save_restore()
         top_level_task = self.workflow.get_tasks_from_spec_name('Task1')[0]
-        top_level_task.reset_token({}, reset_data=True)
+#        top_level_task.reset_token({}, reset_data=True)
+        self.workflow.reset_from_task_id(top_level_task.id)
         task = self.workflow.get_ready_user_tasks()[0]
+        self.assertEqual(len(self.workflow.get_ready_user_tasks()), 1,
+                         "There should only be one task in a ready state.")
         self.assertEqual(task.get_name(), 'Task1')
 
 
@@ -50,11 +51,11 @@ class ResetSubProcessTest(BpmnWorkflowTestCase):
         self.workflow.do_engine_steps()
         self.assertEqual(1, len(self.workflow.get_ready_user_tasks()))
         task = self.workflow.get_ready_user_tasks()[0]
-        self.workflow.complete_task_from_id(task.id)
+        task.run()
         self.workflow.do_engine_steps()
         task = self.workflow.get_ready_user_tasks()[0]
         self.assertEqual(task.get_name(),'SubTask2')
-        self.workflow.complete_task_from_id(task.id)
+        task.run()
         self.workflow.do_engine_steps()
         task = self.workflow.get_tasks_from_spec_name('Task1')[0]
         task.reset_token(self.workflow.last_task.data)
@@ -62,23 +63,19 @@ class ResetSubProcessTest(BpmnWorkflowTestCase):
         self.reload_save_restore()
         task = self.workflow.get_ready_user_tasks()[0]
         self.assertEqual(task.get_name(),'Task1')
-        self.workflow.complete_task_from_id(task.id)
+        task.run()
         self.workflow.do_engine_steps()
         task = self.workflow.get_ready_user_tasks()[0]
         self.assertEqual(task.get_name(),'Subtask2')
-        self.workflow.complete_task_from_id(task.id)
+        task.run()
         self.workflow.do_engine_steps()
         task = self.workflow.get_ready_user_tasks()[0]
         self.assertEqual(task.get_name(),'Subtask2A')
-        self.workflow.complete_task_from_id(task.id)
+        task.run()
         self.workflow.do_engine_steps()
+        self.complete_subworkflow()
         task = self.workflow.get_ready_user_tasks()[0]
         self.assertEqual(task.get_name(),'Task2')
-        self.workflow.complete_task_from_id(task.id)
+        task.run()
         self.workflow.do_engine_steps()
         self.assertTrue(self.workflow.is_completed())
-
-def suite():
-    return unittest.TestLoader().loadTestsFromTestCase(ResetSubProcessTest)
-if __name__ == '__main__':
-    unittest.TextTestRunner(verbosity=2).run(suite())

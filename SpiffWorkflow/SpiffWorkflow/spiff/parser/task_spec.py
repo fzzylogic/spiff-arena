@@ -1,15 +1,44 @@
+# Copyright (C) 2023 Sartography
+#
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 3.0 of the License, or (at your option) any later version.
+#
+# SpiffWorkflow is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301  USA
+
 from lxml import etree
 
-from SpiffWorkflow.dmn.specs.BusinessRuleTask import BusinessRuleTask
 from SpiffWorkflow.bpmn.parser.TaskParser import TaskParser
 from SpiffWorkflow.bpmn.parser.task_parsers import SubprocessParser
 from SpiffWorkflow.bpmn.parser.util import xpath_eval
+
+from SpiffWorkflow.spiff.specs.defaults import (
+    StandardLoopTask,
+    ParallelMultiInstanceTask,
+    SequentialMultiInstanceTask,
+    BusinessRuleTask
+)
 
 SPIFFWORKFLOW_MODEL_NS = 'http://spiffworkflow.org/bpmn/schema/1.0/core'
 SPIFFWORKFLOW_MODEL_PREFIX = 'spiffworkflow'
 
 
 class SpiffTaskParser(TaskParser):
+
+    STANDARD_LOOP_CLASS = StandardLoopTask
+    PARALLEL_MI_CLASS = ParallelMultiInstanceTask
+    SEQUENTIAL_MI_CLASS = SequentialMultiInstanceTask
 
     def parse_extensions(self, node=None):
         if node is None:
@@ -81,6 +110,14 @@ class SpiffTaskParser(TaskParser):
         operator['parameters'] = parameters
         return operator
 
+    def _copy_task_attrs(self, original):
+        # I am so disappointed I have to do this.
+        super()._copy_task_attrs(original)
+        self.task.prescript = original.prescript
+        self.task.postscript = original.postscript
+        original.prescript = None
+        original.postscript = None
+
     def create_task(self):
         # The main task parser already calls this, and even sets an attribute, but
         # 1. It calls it after creating the task so I don't have access to it here yet and
@@ -89,12 +126,7 @@ class SpiffTaskParser(TaskParser):
         extensions = self.parse_extensions()
         prescript = extensions.get('preScript')
         postscript = extensions.get('postScript')
-        return self.spec_class(self.spec, self.get_task_spec_name(),
-                               lane=self.lane,
-                               description=self.node.get('name', None),
-                               position=self.position,
-                               prescript=prescript,
-                               postscript=postscript)
+        return self.spec_class(self.spec, self.bpmn_id, prescript=prescript, postscript=postscript, **self.bpmn_attributes)
 
 
 class SubWorkflowParser(SpiffTaskParser):
@@ -105,11 +137,12 @@ class SubWorkflowParser(SpiffTaskParser):
         postscript = extensions.get('postScript')
         subworkflow_spec = SubprocessParser.get_subprocess_spec(self)
         return self.spec_class(
-            self.spec, self.get_task_spec_name(), subworkflow_spec,
-            lane=self.lane, position=self.position,
-            description=self.node.get('name', None),
+            self.spec, 
+            self.bpmn_id,
+            subworkflow_spec=subworkflow_spec,
             prescript=prescript,
-            postscript=postscript)
+            postscript=postscript,
+            **self.bpmn_attributes)
 
 
 class ScriptTaskParser(SpiffTaskParser):
@@ -118,10 +151,7 @@ class ScriptTaskParser(SpiffTaskParser):
         for child_node in self.node:
             if child_node.tag.endswith('script'):
                 script = child_node.text
-        return self.spec_class(
-            self.spec, self.get_task_spec_name(), script,
-            lane=self.lane, position=self.position,
-            description=self.node.get('name', None))
+        return self.spec_class(self.spec, self.bpmn_id, script, **self.bpmn_attributes)
 
 
 class CallActivityParser(SpiffTaskParser):
@@ -132,11 +162,12 @@ class CallActivityParser(SpiffTaskParser):
         postscript = extensions.get('postScript')
         subworkflow_spec = SubprocessParser.get_call_activity_spec(self)
         return self.spec_class(
-            self.spec, self.get_task_spec_name(), subworkflow_spec,
-            lane=self.lane, position=self.position,
-            description=self.node.get('name', None),
+            self.spec, 
+            self.bpmn_id,
+            subworkflow_spec=subworkflow_spec,
             prescript=prescript,
-            postscript=postscript)
+            postscript=postscript,
+            **self.bpmn_attributes)
 
 class ServiceTaskParser(SpiffTaskParser):
     def create_task(self):
@@ -145,25 +176,30 @@ class ServiceTaskParser(SpiffTaskParser):
         prescript = extensions.get('preScript')
         postscript = extensions.get('postScript')
         return self.spec_class(
-                self.spec, self.get_task_spec_name(),
-                operator['name'], operator['parameters'],
-                operator['resultVariable'],
-                description=self.node.get('name', None),
-                lane=self.lane, position=self.position,
+                self.spec,
+                self.bpmn_id,
+                operation_name=operator['name'], 
+                operation_params=operator['parameters'],
+                result_variable=operator['resultVariable'],
                 prescript=prescript,
-                postscript=postscript)
+                postscript=postscript,
+                **self.bpmn_attributes)
 
 class BusinessRuleTaskParser(SpiffTaskParser):
 
     def create_task(self):
         decision_ref = self.get_decision_ref(self.node)
-        return BusinessRuleTask(self.spec,
-                                self.get_task_spec_name(),
-                                dmnEngine=self.process_parser.parser.get_engine(decision_ref, self.node),
-                                lane=self.lane,
-                                position=self.position,
-                                description=self.node.get('name', None)
-                                )
+        extensions = self.parse_extensions()
+        prescript = extensions.get('preScript')
+        postscript = extensions.get('postScript')
+        return BusinessRuleTask(
+            self.spec,
+            self.bpmn_id,
+            dmnEngine=self.process_parser.parser.get_engine(decision_ref, self.node),
+            prescript=prescript,
+            postscript=postscript,
+            **self.bpmn_attributes,
+        )
 
     @staticmethod
     def get_decision_ref(node):

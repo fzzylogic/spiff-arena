@@ -1,16 +1,15 @@
-"""Message_model."""
 from dataclasses import dataclass
 
 from flask_marshmallow import Schema  # type: ignore
 from marshmallow import INCLUDE
 from sqlalchemy import UniqueConstraint
 
-from spiffworkflow_backend.models.db import db
 from spiffworkflow_backend.models.db import SpiffworkflowBaseDBModel
+from spiffworkflow_backend.models.db import db
 
 
 class SpecReferenceNotFoundError(Exception):
-    """SpecReferenceNotFoundError."""
+    pass
 
 
 @dataclass()
@@ -35,19 +34,18 @@ class SpecReference:
     messages: dict  # Any messages defined in the same file where this process is defined.
     correlations: dict  # Any correlations defined in the same file with this process.
     start_messages: list  # The names of any messages that would start this process.
+    called_element_ids: list  # The element ids of any called elements
 
 
 class SpecReferenceCache(SpiffworkflowBaseDBModel):
     """A cache of information about all the Processes and Decisions defined in all files."""
 
     __tablename__ = "spec_reference_cache"
-    __table_args__ = (
-        UniqueConstraint("identifier", "type", name="_identifier_type_unique"),
-    )
+    __table_args__ = (UniqueConstraint("identifier", "type", name="_identifier_type_unique"),)
     id = db.Column(db.Integer, primary_key=True)
     identifier = db.Column(db.String(255), index=True)
     display_name = db.Column(db.String(255), index=True)
-    process_model_id = db.Column(db.String(255))
+    process_model_id = db.Column(db.String(255), index=True)
     type = db.Column(db.String(255), index=True)  # either 'process' or 'decision'
     file_name = db.Column(db.String(255))
     relative_path = db.Column(db.String(255))
@@ -57,7 +55,6 @@ class SpecReferenceCache(SpiffworkflowBaseDBModel):
 
     @classmethod
     def from_spec_reference(cls, ref: SpecReference) -> "SpecReferenceCache":
-        """From_spec_reference."""
         return cls(
             identifier=ref.identifier,
             display_name=ref.display_name,
@@ -72,11 +69,7 @@ class SpecReferenceCache(SpiffworkflowBaseDBModel):
 
 
 class SpecReferenceSchema(Schema):  # type: ignore
-    """FileSchema."""
-
     class Meta:
-        """Meta."""
-
         model = SpecReference
         fields = [
             "identifier",

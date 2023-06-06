@@ -1,35 +1,26 @@
-"""Process_instance_processor."""
 import json
 import sys
 import traceback
 from dataclasses import dataclass
 from typing import Any
-from typing import Optional
 
-from SpiffWorkflow.exceptions import WorkflowTaskException  # type: ignore
+from SpiffWorkflow.bpmn.exceptions import WorkflowTaskException  # type: ignore
 from SpiffWorkflow.task import Task as SpiffTask  # type: ignore
-
-from spiffworkflow_backend.services.process_instance_processor import (
-    CustomBpmnScriptEngine,
-)
+from spiffworkflow_backend.services.process_instance_processor import CustomBpmnScriptEngine
 
 PythonScriptContext = dict[str, Any]
 
 
 @dataclass
 class ScriptUnitTestResult:
-    """ScriptUnitTestResult."""
-
     result: bool
-    context: Optional[PythonScriptContext] = None
-    error: Optional[str] = None
-    line_number: Optional[int] = None
-    offset: Optional[int] = None
+    context: PythonScriptContext | None = None
+    error: str | None = None
+    line_number: int | None = None
+    offset: int | None = None
 
 
 class ScriptUnitTestRunner:
-    """ScriptUnitTestRunner."""
-
     _script_engine = CustomBpmnScriptEngine()
 
     @classmethod
@@ -39,7 +30,6 @@ class ScriptUnitTestRunner:
         input_context: PythonScriptContext,
         expected_output_context: PythonScriptContext,
     ) -> ScriptUnitTestResult:
-        """Run_task."""
         # make a new variable just for clarity, since we are going to update this dict in place
         # with the output variables from the script.
         context = input_context.copy()
@@ -81,9 +71,7 @@ class ScriptUnitTestRunner:
         context = cls._script_engine.environment.last_result()
         result_as_boolean = context == expected_output_context
 
-        script_unit_test_result = ScriptUnitTestResult(
-            result=result_as_boolean, context=context
-        )
+        script_unit_test_result = ScriptUnitTestResult(result=result_as_boolean, context=context)
         return script_unit_test_result
 
     @classmethod
@@ -92,12 +80,9 @@ class ScriptUnitTestRunner:
         task: SpiffTask,
         test_identifier: str,
     ) -> ScriptUnitTestResult:
-        """Run_test."""
         # this is totally made up, but hopefully resembles what spiffworkflow ultimately does
         unit_tests = task.task_spec.extensions["unitTests"]
-        unit_test = [
-            unit_test for unit_test in unit_tests if unit_test["id"] == test_identifier
-        ][0]
+        unit_test = [unit_test for unit_test in unit_tests if unit_test["id"] == test_identifier][0]
 
         input_context = None
         expected_output_context = None
@@ -114,13 +99,8 @@ class ScriptUnitTestRunner:
         except json.decoder.JSONDecodeError as ex:
             return ScriptUnitTestResult(
                 result=False,
-                error=(
-                    "Failed to parse expectedOutputJson:"
-                    f" {unit_test['expectedOutputJson']}: {str(ex)}"
-                ),
+                error=f"Failed to parse expectedOutputJson: {unit_test['expectedOutputJson']}: {str(ex)}",
             )
 
         script = task.task_spec.script
-        return cls.run_with_script_and_pre_post_contexts(
-            script, input_context, expected_output_context
-        )
+        return cls.run_with_script_and_pre_post_contexts(script, input_context, expected_output_context)

@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-
-# Copyright (C) 2007 Samuel Abels
+# Copyright (C) 2007 Samuel Abels, 2023 Sartography
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -16,6 +16,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
+
 from ..task import TaskState
 from ..exceptions import WorkflowException
 from ..operators import valueof
@@ -62,8 +63,7 @@ class ThreadMerge(Join):
         # task that did the conditional parallel split.
         split_task = my_task._find_ancestor_from_name(self.split_task)
         if split_task is None:
-            msg = 'Join with %s, which was not reached' % self.split_task
-            raise WorkflowException(msg, task_spec=self)
+            raise WorkflowException(f'Join with %s, which was not reached {self.split_task}', task_spec=self)
         tasks = split_task.task_spec._get_activated_threads(split_task)
 
         # The default threshold is the number of threads that were started.
@@ -99,12 +99,13 @@ class ThreadMerge(Join):
         return False
 
     def _update_hook(self, my_task):
+
+        my_task._inherit_data()
         if not self._start(my_task):
             my_task._set_state(TaskState.WAITING)
             return
 
-        split_task_spec = my_task.workflow.get_task_spec_from_name(
-            self.split_task)
+        split_task_spec = my_task.workflow.get_task_spec_from_name(self.split_task)
         split_task = my_task._find_ancestor(split_task_spec)
 
         # Find the inbound task that was completed last.

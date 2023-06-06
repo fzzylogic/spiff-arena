@@ -1,22 +1,20 @@
-"""Authentication_service."""
 import base64
 import enum
 import json
 import time
-from typing import Optional
 
 import jwt
 import requests
 from flask import current_app
 from flask import redirect
-from werkzeug.wrappers import Response
-
+from spiffworkflow_backend.config import HTTP_REQUEST_TIMEOUT_SECONDS
 from spiffworkflow_backend.models.db import db
 from spiffworkflow_backend.models.refresh_token import RefreshTokenModel
+from werkzeug.wrappers import Response
 
 
 class MissingAccessTokenError(Exception):
-    """MissingAccessTokenError."""
+    pass
 
 
 class NotAuthorizedError(Exception):
@@ -35,30 +33,28 @@ class UserNotLoggedInError(Exception):
 
 
 class TokenExpiredError(Exception):
-    """TokenExpiredError."""
+    pass
 
 
 class TokenInvalidError(Exception):
-    """TokenInvalidError."""
+    pass
 
 
 class TokenNotProvidedError(Exception):
     pass
 
 
-class AuthenticationProviderTypes(enum.Enum):
-    """AuthenticationServiceProviders."""
+class OpenIdConnectionError(Exception):
+    pass
 
+
+class AuthenticationProviderTypes(enum.Enum):
     open_id = "open_id"
     internal = "internal"
 
 
 class AuthenticationService:
-    """AuthenticationService."""
-
-    ENDPOINT_CACHE: dict = (
-        {}
-    )  # We only need to find the openid endpoints once, then we can cache them.
+    ENDPOINT_CACHE: dict = {}  # We only need to find the openid endpoints once, then we can cache them.
 
     @staticmethod
     def client_id() -> str:
@@ -73,31 +69,27 @@ class AuthenticationService:
     @staticmethod
     def secret_key() -> str:
         """Returns the secret key from the config."""
-        return current_app.config.get(
-            "SPIFFWORKFLOW_BACKEND_OPEN_ID_CLIENT_SECRET_KEY", ""
-        )
+        return current_app.config.get("SPIFFWORKFLOW_BACKEND_OPEN_ID_CLIENT_SECRET_KEY", "")
 
     @classmethod
     def open_id_endpoint_for_name(cls, name: str) -> str:
         """All openid systems provide a mapping of static names to the full path of that endpoint."""
         openid_config_url = f"{cls.server_url()}/.well-known/openid-configuration"
         if name not in AuthenticationService.ENDPOINT_CACHE:
-            response = requests.get(openid_config_url)
-            AuthenticationService.ENDPOINT_CACHE = response.json()
+            try:
+                response = requests.get(openid_config_url, timeout=HTTP_REQUEST_TIMEOUT_SECONDS)
+                AuthenticationService.ENDPOINT_CACHE = response.json()
+            except requests.exceptions.ConnectionError as ce:
+                raise OpenIdConnectionError(f"Cannot connect to given open id url: {openid_config_url}") from ce
         if name not in AuthenticationService.ENDPOINT_CACHE:
-            raise Exception(
-                f"Unknown OpenID Endpoint: {name}. Tried to get from"
-                f" {openid_config_url}"
-            )
+            raise Exception(f"Unknown OpenID Endpoint: {name}. Tried to get from {openid_config_url}")
         return AuthenticationService.ENDPOINT_CACHE.get(name, "")
 
     @staticmethod
     def get_backend_url() -> str:
-        """Get_backend_url."""
         return str(current_app.config["SPIFFWORKFLOW_BACKEND_URL"])
 
-    def logout(self, id_token: str, redirect_url: Optional[str] = None) -> Response:
-        """Logout."""
+    def logout(self, id_token: str, redirect_url: str | None = None) -> Response:
         if redirect_url is None:
             redirect_url = f"{self.get_backend_url()}/v1.0/logout_return"
         request_url = (
@@ -110,14 +102,10 @@ class AuthenticationService:
 
     @staticmethod
     def generate_state(redirect_url: str) -> bytes:
-        """Generate_state."""
         state = base64.b64encode(bytes(str({"redirect_url": redirect_url}), "UTF-8"))
         return state
 
-    def get_login_redirect_url(
-        self, state: str, redirect_url: str = "/v1.0/login_return"
-    ) -> str:
-        """Get_login_redirect_url."""
+    def get_login_redirect_url(self, state: str, redirect_url: str = "/v1.0/login_return") -> str:
         return_redirect_url = f"{self.get_backend_url()}{redirect_url}"
         login_redirect_url = (
             self.open_id_endpoint_for_name("authorization_endpoint")
@@ -129,10 +117,7 @@ class AuthenticationService:
         )
         return login_redirect_url
 
-    def get_auth_token_object(
-        self, code: str, redirect_url: str = "/v1.0/login_return"
-    ) -> dict:
-        """Get_auth_token_object."""
+    def get_auth_token_object(self, code: str, redirect_url: str = "/v1.0/login_return") -> dict:
         backend_basic_auth_string = f"{self.client_id()}:{self.secret_key()}"
         backend_basic_auth_bytes = bytes(backend_basic_auth_string, encoding="ascii")
         backend_basic_auth = base64.b64encode(backend_basic_auth_bytes)
@@ -148,7 +133,7 @@ class AuthenticationService:
 
         request_url = self.open_id_endpoint_for_name("token_endpoint")
 
-        response = requests.post(request_url, data=data, headers=headers)
+        response = requests.post(request_url, data=data, headers=headers, timeout=HTTP_REQUEST_TIMEOUT_SECONDS)
         auth_token_object: dict = json.loads(response.text)
         return auth_token_object
 
@@ -169,13 +154,17 @@ class AuthenticationService:
         aud = decoded_token["aud"]
         azp = decoded_token["azp"] if "azp" in decoded_token else None
         iat = decoded_token["iat"]
+
+        valid_audience_values = (cls.client_id(), "account")
+        audience_array_in_token = aud
+        if isinstance(aud, str):
+            audience_array_in_token = [aud]
+        overlapping_aud_values = [x for x in audience_array_in_token if x in valid_audience_values]
+
         if iss != cls.server_url():
             valid = False
         # aud could be an array or a string
-        elif aud not in (cls.client_id(), "account") and aud != [
-            cls.client_id(),
-            "account",
-        ]:
+        elif len(overlapping_aud_values) < 1:
             valid = False
         elif azp and azp not in (
             cls.client_id(),
@@ -204,16 +193,11 @@ class AuthenticationService:
 
     @staticmethod
     def store_refresh_token(user_id: int, refresh_token: str) -> None:
-        """Store_refresh_token."""
-        refresh_token_model = RefreshTokenModel.query.filter(
-            RefreshTokenModel.user_id == user_id
-        ).first()
+        refresh_token_model = RefreshTokenModel.query.filter(RefreshTokenModel.user_id == user_id).first()
         if refresh_token_model:
             refresh_token_model.token = refresh_token
         else:
-            refresh_token_model = RefreshTokenModel(
-                user_id=user_id, token=refresh_token
-            )
+            refresh_token_model = RefreshTokenModel(user_id=user_id, token=refresh_token)
         db.session.add(refresh_token_model)
         try:
             db.session.commit()
@@ -224,8 +208,7 @@ class AuthenticationService:
             ) from e
 
     @staticmethod
-    def get_refresh_token(user_id: int) -> Optional[str]:
-        """Get_refresh_token."""
+    def get_refresh_token(user_id: int) -> str | None:
         refresh_token_object: RefreshTokenModel = RefreshTokenModel.query.filter(
             RefreshTokenModel.user_id == user_id
         ).first()
@@ -253,6 +236,6 @@ class AuthenticationService:
 
         request_url = cls.open_id_endpoint_for_name("token_endpoint")
 
-        response = requests.post(request_url, data=data, headers=headers)
+        response = requests.post(request_url, data=data, headers=headers, timeout=HTTP_REQUEST_TIMEOUT_SECONDS)
         auth_token_object: dict = json.loads(response.text)
         return auth_token_object

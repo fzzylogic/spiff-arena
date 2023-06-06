@@ -5,21 +5,8 @@ from spiffworkflow_backend import get_hacked_up_app_for_script
 from spiffworkflow_backend.models.db import db
 from spiffworkflow_backend.models.process_instance import ProcessInstanceModel
 from spiffworkflow_backend.models.user import UserModel
-from spiffworkflow_backend.services.process_instance_processor import (
-    ProcessInstanceProcessor,
-)
-from spiffworkflow_backend.services.process_instance_service import (
-    ProcessInstanceService,
-)
-
-
-def print_process_instance_count(process_model_identifier_ticket: str) -> None:
-    """Print process instance count."""
-    process_instances = ProcessInstanceModel.query.filter_by(
-        process_model_identifier=process_model_identifier_ticket
-    ).all()
-    process_instance_count = len(process_instances)
-    print(f"process_instance_count: {process_instance_count}")
+from spiffworkflow_backend.services.process_instance_processor import ProcessInstanceProcessor
+from spiffworkflow_backend.services.process_instance_service import ProcessInstanceService
 
 
 def main():
@@ -28,8 +15,7 @@ def main():
     with app.app_context():
         process_model_identifier_ticket = "ticket"
         db.session.query(ProcessInstanceModel).filter(
-            ProcessInstanceModel.process_model_identifier
-            == process_model_identifier_ticket
+            ProcessInstanceModel.process_model_identifier == process_model_identifier_ticket
         ).delete()
         db.session.commit()
 
@@ -60,9 +46,7 @@ def main():
 
             header = next(reader)
             for column_name in columns_to_data_key_mappings:
-                columns_to_header_index_mappings[column_name] = header.index(
-                    column_name
-                )
+                columns_to_header_index_mappings[column_name] = header.index(column_name)
             id_index = header.index("ID")
             priority_index = header.index("Priority")
             print(f"header: {header}")
@@ -87,9 +71,7 @@ def main():
                     desired_data_key,
                 ) in columns_to_data_key_mappings.items():
                     appropriate_index = columns_to_header_index_mappings[column_name]
-                    processor.bpmn_process_instance.data[desired_data_key] = row[
-                        appropriate_index
-                    ]
+                    processor.bpmn_process_instance.data[desired_data_key] = row[appropriate_index]
 
                 print(f"datas: {processor.bpmn_process_instance.data}")
                 if processor.bpmn_process_instance.data["month"] == "":

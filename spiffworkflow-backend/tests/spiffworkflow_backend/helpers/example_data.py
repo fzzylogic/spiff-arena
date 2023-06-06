@@ -1,26 +1,21 @@
-"""Example_data."""
 import glob
 import os
-from typing import Optional
 
 from flask import current_app
-
 from spiffworkflow_backend.models.process_model import ProcessModelInfo
 from spiffworkflow_backend.services.process_model_service import ProcessModelService
 from spiffworkflow_backend.services.spec_file_service import SpecFileService
 
 
 class ExampleDataLoader:
-    """ExampleDataLoader."""
-
     @staticmethod
     def create_spec(
         process_model_id: str,
         display_name: str = "",
         description: str = "",
         display_order: int = 0,
-        bpmn_file_name: Optional[str] = None,
-        process_model_source_directory: Optional[str] = None,
+        bpmn_file_name: str | None = None,
+        process_model_source_directory: str | None = None,
     ) -> ProcessModelInfo:
         """Assumes that process_model_source_directory exists in static/bpmn and contains bpmn_file_name.
 
@@ -41,7 +36,7 @@ class ExampleDataLoader:
 
         bpmn_file_name_with_extension = bpmn_file_name
         if not bpmn_file_name_with_extension:
-            bpmn_file_name_with_extension = process_model_id
+            bpmn_file_name_with_extension = os.path.basename(process_model_id)
 
         if not bpmn_file_name_with_extension.endswith(".bpmn"):
             bpmn_file_name_with_extension += ".bpmn"
@@ -65,7 +60,7 @@ class ExampleDataLoader:
             file_name_matcher,
         )
 
-        files = glob.glob(file_glob)
+        files = sorted(glob.glob(file_glob))
         for file_path in files:
             if os.path.isdir(file_path):
                 continue  # Don't try to process sub directories
@@ -77,13 +72,9 @@ class ExampleDataLoader:
             try:
                 file = open(file_path, "rb")
                 data = file.read()
-                file_info = SpecFileService.add_file(
-                    process_model_info=spec, file_name=filename, binary_data=data
-                )
+                file_info = SpecFileService.add_file(process_model_info=spec, file_name=filename, binary_data=data)
                 if is_primary:
-                    references = SpecFileService.get_references_for_file(
-                        file_info, spec
-                    )
+                    references = SpecFileService.get_references_for_file(file_info, spec)
                     spec.primary_process_id = references[0].identifier
                     spec.primary_file_name = filename
                     ProcessModelService.save_process_model(spec)

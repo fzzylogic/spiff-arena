@@ -1,4 +1,3 @@
-"""Test_message_service."""
 import os
 import sys
 
@@ -6,95 +5,67 @@ import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 from lxml import etree  # type: ignore
+from spiffworkflow_backend.models.db import db
+from spiffworkflow_backend.models.spec_reference import SpecReferenceCache
+from spiffworkflow_backend.services.process_model_service import ProcessModelService
+from spiffworkflow_backend.services.spec_file_service import ProcessModelFileInvalidError
+from spiffworkflow_backend.services.spec_file_service import SpecFileService
+
 from tests.spiffworkflow_backend.helpers.base_test import BaseTest
 from tests.spiffworkflow_backend.helpers.test_data import load_test_spec
 
-from spiffworkflow_backend.models.db import db
-from spiffworkflow_backend.models.spec_reference import SpecReferenceCache
-from spiffworkflow_backend.models.user import UserModel
-from spiffworkflow_backend.services.process_model_service import ProcessModelService
-from spiffworkflow_backend.services.spec_file_service import (
-    ProcessModelFileInvalidError,
-)
-from spiffworkflow_backend.services.spec_file_service import SpecFileService
-
 
 class TestSpecFileService(BaseTest):
-    """TestSpecFileService."""
-
-    process_group_id = "test_process_group_id"
-    process_model_id = "call_activity_nested"
+    process_group_id = ""
+    process_model_id = "test_process_group_id/call_activity_nested"
+    # process_group_id = "test_process_group_id"
+    # process_model_id = "call_activity_nested"
     bpmn_file_name = "call_activity_nested.bpmn"
 
-    call_activity_nested_relative_file_path = os.path.join(
-        process_group_id, process_model_id, bpmn_file_name
-    )
+    call_activity_nested_relative_file_path = os.path.join(process_group_id, process_model_id, bpmn_file_name)
 
     def test_can_store_process_ids_for_lookup(
         self,
         app: Flask,
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
-        with_super_admin_user: UserModel,
     ) -> None:
-        """Test_can_store_process_ids_for_lookup."""
-        self.create_group_and_model_with_bpmn(
-            client=client,
-            user=with_super_admin_user,
-            process_group_id=self.process_group_id,
+        load_test_spec(
             process_model_id=self.process_model_id,
             bpmn_file_name=self.bpmn_file_name,
-            bpmn_file_location="call_activity_nested",
+            process_model_source_directory="call_activity_nested",
         )
         bpmn_process_id_lookups = SpecReferenceCache.query.all()
         assert len(bpmn_process_id_lookups) == 1
         assert bpmn_process_id_lookups[0].identifier == "Level1"
-        assert (
-            bpmn_process_id_lookups[0].relative_path
-            == self.call_activity_nested_relative_file_path
-        )
+        assert bpmn_process_id_lookups[0].relative_path == self.call_activity_nested_relative_file_path
 
     def test_fails_to_save_duplicate_process_id(
         self,
         app: Flask,
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
-        with_super_admin_user: UserModel,
     ) -> None:
-        """Test_fails_to_save_duplicate_process_id."""
         bpmn_process_identifier = "Level1"
-        self.create_group_and_model_with_bpmn(
-            client=client,
-            user=with_super_admin_user,
-            process_group_id=self.process_group_id,
+        load_test_spec(
             process_model_id=self.process_model_id,
             bpmn_file_name=self.bpmn_file_name,
-            bpmn_file_location=self.process_model_id,
+            process_model_source_directory="call_activity_nested",
         )
         bpmn_process_id_lookups = SpecReferenceCache.query.all()
         assert len(bpmn_process_id_lookups) == 1
         assert bpmn_process_id_lookups[0].identifier == bpmn_process_identifier
-        assert (
-            bpmn_process_id_lookups[0].relative_path
-            == self.call_activity_nested_relative_file_path
-        )
+        assert bpmn_process_id_lookups[0].relative_path == self.call_activity_nested_relative_file_path
         with pytest.raises(ProcessModelFileInvalidError) as exception:
             load_test_spec(
                 "call_activity_nested_duplicate",
                 process_model_source_directory="call_activity_duplicate",
                 bpmn_file_name="call_activity_nested_duplicate",
             )
-            assert (
-                f"Process id ({bpmn_process_identifier}) has already been used"
-                in str(exception.value)
-            )
+            assert f"Process id ({bpmn_process_identifier}) has already been used" in str(exception.value)
 
-        process_model = ProcessModelService.get_process_model(
-            "call_activity_nested_duplicate"
-        )
-        full_file_path = SpecFileService.full_file_path(
-            process_model, "call_activity_nested_duplicate.bpmn"
-        )
+        process_model = ProcessModelService.get_process_model("call_activity_nested_duplicate")
+        full_file_path = SpecFileService.full_file_path(process_model, "call_activity_nested_duplicate.bpmn")
         assert not os.path.isfile(full_file_path)
 
     def test_updates_relative_file_path_when_appropriate(
@@ -102,9 +73,7 @@ class TestSpecFileService(BaseTest):
         app: Flask,
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
-        with_super_admin_user: UserModel,
     ) -> None:
-        """Test_updates_relative_file_path_when_appropriate."""
         bpmn_process_identifier = "Level1"
         process_id_lookup = SpecReferenceCache(
             identifier=bpmn_process_identifier,
@@ -114,29 +83,43 @@ class TestSpecFileService(BaseTest):
         db.session.add(process_id_lookup)
         db.session.commit()
 
-        self.create_group_and_model_with_bpmn(
-            client=client,
-            user=with_super_admin_user,
-            process_group_id=self.process_group_id,
+        load_test_spec(
             process_model_id=self.process_model_id,
             bpmn_file_name=self.bpmn_file_name,
-            bpmn_file_location=self.process_model_id,
+            process_model_source_directory="call_activity_nested",
         )
 
         bpmn_process_id_lookups = SpecReferenceCache.query.all()
         assert len(bpmn_process_id_lookups) == 1
         assert bpmn_process_id_lookups[0].identifier == bpmn_process_identifier
-        assert (
-            bpmn_process_id_lookups[0].relative_path
-            == self.call_activity_nested_relative_file_path
+        assert bpmn_process_id_lookups[0].relative_path == self.call_activity_nested_relative_file_path
+
+    # this is really a test of your configuration.
+    # sqlite and postgres are case sensitive by default,
+    # but mysql is not, and our app requires that it be.
+    def test_database_is_case_sensitive(
+        self,
+        app: Flask,
+        with_db_and_bpmn_file_cleanup: None,
+    ) -> None:
+        process_id_lookup = SpecReferenceCache(
+            identifier="HOT",
+            type="process",
         )
+        db.session.add(process_id_lookup)
+        db.session.commit()
+        process_id_lookup = SpecReferenceCache(
+            identifier="hot",
+            type="process",
+        )
+        db.session.add(process_id_lookup)
+        db.session.commit()
 
     def test_change_the_identifier_cleans_up_cache(
         self,
         app: Flask,
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
-        with_super_admin_user: UserModel,
     ) -> None:
         """When a BPMN processes identifier is changed in a file, the old id is removed from the cache."""
         old_identifier = "ye_old_identifier"
@@ -144,36 +127,29 @@ class TestSpecFileService(BaseTest):
             identifier=old_identifier,
             relative_path=self.call_activity_nested_relative_file_path,
             file_name=self.bpmn_file_name,
-            process_model_id=f"{self.process_group_id}/{self.process_model_id}",
+            process_model_id=self.process_model_id,
             type="process",
         )
         db.session.add(process_id_lookup)
         db.session.commit()
 
-        self.create_group_and_model_with_bpmn(
-            client=client,
-            user=with_super_admin_user,
-            process_group_id=self.process_group_id,
+        load_test_spec(
             process_model_id=self.process_model_id,
             bpmn_file_name=self.bpmn_file_name,
-            bpmn_file_location=self.process_model_id,
+            process_model_source_directory="call_activity_nested",
         )
 
         bpmn_process_id_lookups = SpecReferenceCache.query.all()
         assert len(bpmn_process_id_lookups) == 1
         assert bpmn_process_id_lookups[0].identifier != old_identifier
         assert bpmn_process_id_lookups[0].identifier == "Level1"
-        assert (
-            bpmn_process_id_lookups[0].relative_path
-            == self.call_activity_nested_relative_file_path
-        )
+        assert bpmn_process_id_lookups[0].relative_path == self.call_activity_nested_relative_file_path
 
     def test_load_reference_information(
         self,
         app: Flask,
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
-        with_super_admin_user: UserModel,
     ) -> None:
         """Test_load_reference_information.
 
@@ -186,34 +162,22 @@ class TestSpecFileService(BaseTest):
         a DMN file can (theoretically) contain many decisions.  So this
         is an array.
         """
-        process_group_id = "test_group"
-        process_model_id = "call_activity_nested"
-        process_model_identifier = self.create_group_and_model_with_bpmn(
-            client=client,
-            user=with_super_admin_user,
-            process_group_id=process_group_id,
+        process_model_id = "test_group/call_activity_nested"
+        process_model = load_test_spec(
             process_model_id=process_model_id,
-            # bpmn_file_name=bpmn_file_name,
-            bpmn_file_location=process_model_id,
+            process_model_source_directory="call_activity_nested",
         )
-        # load_test_spec(
-        #     ,
-        #     process_model_source_directory="call_activity_nested",
-        # )
-        process_model_info = ProcessModelService.get_process_model(
-            process_model_identifier
-        )
-        files = SpecFileService.get_files(process_model_info)
+        files = SpecFileService.get_files(process_model)
 
         file = next(filter(lambda f: f.name == "call_activity_level_3.bpmn", files))
-        ca_3 = SpecFileService.get_references_for_file(file, process_model_info)
+        ca_3 = SpecFileService.get_references_for_file(file, process_model)
         assert len(ca_3) == 1
         assert ca_3[0].display_name == "Level 3"
         assert ca_3[0].identifier == "Level3"
         assert ca_3[0].type == "process"
 
         file = next(filter(lambda f: f.name == "level2c.dmn", files))
-        dmn1 = SpecFileService.get_references_for_file(file, process_model_info)
+        dmn1 = SpecFileService.get_references_for_file(file, process_model)
         assert len(dmn1) == 1
         assert dmn1[0].display_name == "Decision 1"
         assert dmn1[0].identifier == "Decision_0vrtcmk"
@@ -225,16 +189,13 @@ class TestSpecFileService(BaseTest):
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
     ) -> None:
-        """Test_validate_bpmn_xml_with_invalid_xml."""
         process_model = load_test_spec(
             process_model_id="group/invalid_xml",
             bpmn_file_name="script_error_with_task_data.bpmn",
             process_model_source_directory="error",
         )
         with pytest.raises(ProcessModelFileInvalidError):
-            SpecFileService.update_file(
-                process_model, "bad_xml.bpmn", b"THIS_IS_NOT_VALID_XML"
-            )
+            SpecFileService.update_file(process_model, "bad_xml.bpmn", b"THIS_IS_NOT_VALID_XML")
 
         full_file_path = SpecFileService.full_file_path(process_model, "bad_xml.bpmn")
         assert not os.path.isfile(full_file_path)
@@ -249,18 +210,9 @@ class TestSpecFileService(BaseTest):
         client: FlaskClient,
         with_db_and_bpmn_file_cleanup: None,
     ) -> None:
-        """Test_does_not_evaluate_entities."""
         string_replacement = b"THIS_STRING_SHOULD_NOT_EXIST_ITS_SECRET"
-        tmp_file = os.path.normpath(
-            self.get_test_data_file_full_path("file_to_inject", "xml_with_entity")
-        )
-        file_contents = self.get_test_data_file_contents(
-            "invoice.bpmn", "xml_with_entity"
-        )
-        file_contents = (
-            file_contents.decode("utf-8")
-            .replace("{{FULL_PATH_TO_FILE}}", tmp_file)
-            .encode()
-        )
+        tmp_file = os.path.normpath(self.get_test_data_file_full_path("file_to_inject", "xml_with_entity"))
+        file_contents = self.get_test_data_file_contents("invoice.bpmn", "xml_with_entity")
+        file_contents = file_contents.decode("utf-8").replace("{{FULL_PATH_TO_FILE}}", tmp_file).encode()
         etree_element = SpecFileService.get_etree_from_xml_bytes(file_contents)
         assert string_replacement not in etree.tostring(etree_element)

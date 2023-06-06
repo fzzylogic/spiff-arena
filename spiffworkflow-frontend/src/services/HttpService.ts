@@ -8,7 +8,7 @@ const HttpMethods = {
   DELETE: 'DELETE',
 };
 
-const getBasicHeaders = (): object => {
+export const getBasicHeaders = (): Record<string, string> => {
   if (UserService.isLoggedIn()) {
     return {
       Authorization: `Bearer ${UserService.getAccessToken()}`,
@@ -56,6 +56,7 @@ backendCallProps) => {
     Object.assign(httpArgs, { body: postBody });
   } else if (typeof postBody === 'object') {
     if (!objectIsEmpty(postBody)) {
+      // NOTE: stringify strips out keys with value undefined
       Object.assign(httpArgs, { body: JSON.stringify(postBody) });
       Object.assign(headers, { 'Content-Type': 'application/json' });
     }

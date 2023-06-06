@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ProcessInstanceListTable from '../components/ProcessInstanceListTable';
+import { slugifyString } from '../helpers';
 import HttpService from '../services/HttpService';
 
 export default function CompletedInstances() {
@@ -18,35 +19,60 @@ export default function CompletedInstances() {
     }
 
     return userGroups.map((userGroup: string) => {
+      const titleText = `This is a list of instances with tasks that were completed by the ${userGroup} group.`;
+      const headerElement = (
+        <h2 title={titleText} className="process-instance-table-header">
+          Instances with tasks completed by <strong>{userGroup}</strong>
+        </h2>
+      );
+      const identifierForTable = `completed-by-group-${slugifyString(
+        userGroup
+      )}`;
       return (
-        <>
-          <h2>With tasks completed by group: {userGroup}</h2>
-          <p className="data-table-description">
-            This is a list of instances with tasks that were completed by the{' '}
-            {userGroup} group.
-          </p>
-          <ProcessInstanceListTable
-            filtersEnabled={false}
-            paginationQueryParamPrefix="group_completed_instances"
-            paginationClassName="with-large-bottom-margin"
-            perPageOptions={[2, 5, 25]}
-            reportIdentifier="system_report_completed_instances_with_tasks_completed_by_my_groups"
-            showReports={false}
-            textToShowIfEmpty="This group has no completed instances at this time."
-            additionalParams={`user_group_identifier=${userGroup}`}
-          />
-        </>
+        <ProcessInstanceListTable
+          headerElement={headerElement}
+          tableHtmlId={identifierForTable}
+          showLinkToReport
+          filtersEnabled={false}
+          paginationQueryParamPrefix="group_completed_instances"
+          paginationClassName="with-large-bottom-margin"
+          perPageOptions={[2, 5, 25]}
+          reportIdentifier="system_report_completed_instances"
+          showReports={false}
+          textToShowIfEmpty="This group has no completed instances at this time."
+          additionalReportFilters={[
+            { field_name: 'user_group_identifier', field_value: userGroup },
+          ]}
+          showActionsColumn
+        />
       );
     });
   };
 
+  const startedByMeTitleText =
+    'This is a list of instances you started that are now complete.';
+  const startedByMeHeaderElement = (
+    <h2 title={startedByMeTitleText} className="process-instance-table-header">
+      Started by me
+    </h2>
+  );
+  const withTasksCompletedByMeTitleText =
+    'This is a list of instances where you have completed tasks.';
+  const withTasksHeaderElement = (
+    <h2
+      title={withTasksCompletedByMeTitleText}
+      className="process-instance-table-header"
+    >
+      Instances with tasks completed by me
+    </h2>
+  );
+
   return (
     <>
-      <h2>My completed instances</h2>
-      <p className="data-table-description">
-        This is a list of instances you started that are now complete.
-      </p>
       <ProcessInstanceListTable
+        headerElement={startedByMeHeaderElement}
+        tableHtmlId="my-completed-instances"
+        showLinkToReport
         filtersEnabled={false}
         paginationQueryParamPrefix="my_completed_instances"
         perPageOptions={[2, 5, 25]}
@@ -55,12 +81,12 @@ export default function CompletedInstances() {
         textToShowIfEmpty="You have no completed instances at this time."
         paginationClassName="with-large-bottom-margin"
         autoReload
+        showActionsColumn
       />
-      <h2>With tasks completed by me</h2>
-      <p className="data-table-description">
-        This is a list of instances where you have completed tasks.
-      </p>
       <ProcessInstanceListTable
+        headerElement={withTasksHeaderElement}
+        tableHtmlId="with-tasks-completed-by-me"
+        showLinkToReport
         filtersEnabled={false}
         paginationQueryParamPrefix="my_completed_tasks"
         perPageOptions={[2, 5, 25]}
@@ -68,6 +94,7 @@ export default function CompletedInstances() {
         showReports={false}
         textToShowIfEmpty="You have no completed instances at this time."
         paginationClassName="with-large-bottom-margin"
+        showActionsColumn
       />
       {groupTableComponents()}
     </>

@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-
-# Copyright (C) 2007 Samuel Abels
+# Copyright (C) 2007 Samuel Abels, 2023 Sartography
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -16,6 +16,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
+
 from ..task import TaskState
 from ..exceptions import WorkflowException
 from .base import TaskSpec
@@ -89,32 +90,18 @@ class MultiChoice(TaskSpec):
         # The caller needs to make sure that predict() is called.
 
     def _predict_hook(self, my_task):
-        if self.choice:
-            outputs = [self._wf_spec.get_task_spec_from_name(o)
-                       for o in self.choice]
-        else:
-            outputs = self.outputs
-
-        # Default to MAYBE for all conditional outputs, default to LIKELY
-        # for unconditional ones. We can not default to FUTURE, because
-        # a call to trigger() may override the unconditional paths.
-        my_task._sync_children(outputs)
-        if not my_task._is_definite():
-            best_state = my_task.state
-        else:
-            best_state = TaskState.LIKELY
-
-        # Collect a list of all unconditional outputs.
-        outputs = []
+        conditional, unconditional = [], []
         for condition, output in self.cond_task_specs:
-            if condition is None:
-                outputs.append(self._wf_spec.get_task_spec_from_name(output))
-
-        for child in my_task.children:
-            if child._is_definite():
+            if self.choice is not None and output not in self.choice:
                 continue
-            if child.task_spec in outputs:
-                child._set_state(best_state)
+            if condition is None:
+                unconditional.append(self._wf_spec.get_task_spec_from_name(output))
+            else:
+                conditional.append(self._wf_spec.get_task_spec_from_name(output))
+        state = TaskState.MAYBE if my_task.state == TaskState.MAYBE else TaskState.LIKELY
+        my_task._sync_children(unconditional, state)
+        for spec in conditional:
+            my_task._add_child(spec, TaskState.MAYBE)
 
     def _get_matching_outputs(self, my_task):
         outputs = []
@@ -125,12 +112,12 @@ class MultiChoice(TaskSpec):
                 outputs.append(self._wf_spec.get_task_spec_from_name(output))
         return outputs
 
-    def _on_complete_hook(self, my_task):
-        """
-        Runs the task. Should not be called directly.
-        Returns True if completed, False otherwise.
-        """
+    def _run_hook(self, my_task):
+        """Runs the task. Should not be called directly."""
         my_task._sync_children(self._get_matching_outputs(my_task), TaskState.FUTURE)
+        for child in my_task.children:
+            child.task_spec._predict(child, mask=TaskState.FUTURE|TaskState.PREDICTED_MASK)
+        return True
 
     def serialize(self, serializer):
         return serializer.serialize_multi_choice(self)

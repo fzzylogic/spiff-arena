@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-
-# Copyright (C) 2012 Matthew Hampton
+# Copyright (C) 2012 Matthew Hampton, 2023 Sartography
 #
-# This library is free software; you can redistribute it and/or
+# This file is part of SpiffWorkflow.
+#
+# SpiffWorkflow is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
-# version 2.1 of the License, or (at your option) any later version.
+# version 3.0 of the License, or (at your option) any later version.
 #
-# This library is distributed in the hope that it will be useful,
+# SpiffWorkflow is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 # Lesser General Public License for more details.
@@ -17,26 +17,21 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301  USA
 
-import sys
-import traceback
-from .ValidationException import ValidationException
-from ..specs.NoneTask import NoneTask
-from ..specs.ScriptTask import ScriptTask
-from ..specs.UserTask import UserTask
-from ..specs.events.IntermediateEvent import _BoundaryEventParent
-from ..specs.events.event_definitions import CancelEventDefinition
-from ..specs.MultiInstanceTask import getDynamicMIClass
-from ..specs.SubWorkflowTask import CallActivity, TransactionSubprocess, SubWorkflowTask
-from ..specs.ExclusiveGateway import ExclusiveGateway
-from ..specs.InclusiveGateway import InclusiveGateway
-from ...dmn.specs.BusinessRuleTask import BusinessRuleTask
-from ...operators import Attrib, PathAttrib
-from .util import one, first
+from SpiffWorkflow.bpmn.specs.mixins.subworkflow_task import TransactionSubprocess
+from SpiffWorkflow.bpmn.specs.mixins.exclusive_gateway import ExclusiveGateway
+from SpiffWorkflow.bpmn.specs.mixins.inclusive_gateway import InclusiveGateway
+from SpiffWorkflow.bpmn.specs.defaults import (
+    StandardLoopTask,
+    SequentialMultiInstanceTask,
+    ParallelMultiInstanceTask
+)
+from SpiffWorkflow.bpmn.specs.control import _BoundaryEventParent
+from SpiffWorkflow.bpmn.specs.event_definitions import CancelEventDefinition
+from SpiffWorkflow.bpmn.specs.data_spec import TaskDataReference
+
+from .util import one
 from .node_parser import NodeParser
-
-STANDARDLOOPCOUNT = '25'
-
-CAMUNDA_MODEL_NS = 'http://camunda.org/schema/1.0/bpmn'
+from .ValidationException import ValidationException
 
 
 class TaskParser(NodeParser):
@@ -47,6 +42,12 @@ class TaskParser(NodeParser):
     It also results in the recursive parsing of connected tasks, connecting all
     outgoing transitions, once the child tasks have all been parsed.
     """
+
+    # I hate myself for this.  I wanted to at least relegate it to the top-level
+    # parser where the rest of the similar nonsense is, but it's inaccessible here.
+    STANDARD_LOOP_CLASS = StandardLoopTask
+    PARALLEL_MI_CLASS = ParallelMultiInstanceTask
+    SEQUENTIAL_MI_CLASS = SequentialMultiInstanceTask
 
     def __init__(self, process_parser, spec_class, node, nsmap=None, lane=None):
         """
@@ -63,69 +64,104 @@ class TaskParser(NodeParser):
         self.spec_class = spec_class
         self.spec = self.process_parser.spec
 
-    def _set_multiinstance_attributes(self, is_sequential, expanded, loop_count,
-                                      loop_task=False, element_var=None, collection=None, completion_condition=None):
-        # This should be replaced with its own task parser (though I'm not sure how feasible this is given
-        # the current parser achitecture).  We should also consider separate classes for loop vs
-        # multiinstance because having all these optional attributes is a nightmare
+    def _copy_task_attrs(self, original):
 
-        if not isinstance(self.task, (NoneTask, UserTask, BusinessRuleTask, ScriptTask, CallActivity, SubWorkflowTask)):
-            raise ValidationException(
-                f'Unsupported MultiInstance Task: {self.task.__class__}',
-                node=self.node,
-                file_name=self.filename)
+        self.task.inputs = original.inputs
+        self.task.outputs = original.outputs
+        self.task.io_specification = original.io_specification
+        self.task.data_input_associations = original.data_input_associations
+        self.task.data_output_associations = original.data_output_associations
+        self.task.description = original.description
 
-        self.task.loopTask = loop_task
-        self.task.isSequential = is_sequential
-        self.task.expanded = expanded
-        # make dot notation compatible with bmpmn path notation.
-        self.task.times = PathAttrib(loop_count.replace('.', '/')) if loop_count.find('.') > 0 else Attrib(loop_count)
-        self.task.elementVar = element_var
-        self.task.collection = collection
-        self.task.completioncondition = completion_condition
+        original.inputs = [self.task]
+        original.outputs = []
+        original.io_specification = None
+        original.data_input_associations = []
+        original.data_output_associations = []
+        original.name = f'{original.name} [child]'
+        self.task.task_spec = original.name
+        self.spec.task_specs[original.name] = original
 
-        self.task.prevtaskclass = self.task.__module__ + "." + self.task.__class__.__name__
-        newtaskclass = getDynamicMIClass(self.get_id(),self.task.__class__)
-        self.task.__class__ = newtaskclass
+    def _add_loop_task(self, loop_characteristics):
 
-    def _detect_multiinstance(self):
+        maximum = loop_characteristics.attrib.get('loopMaximum')
+        if maximum is not None:
+            maximum = int(maximum)
+        condition = self.xpath('./bpmn:standardLoopCharacteristics/bpmn:loopCondition')
+        condition = condition[0].text if len(condition) > 0 else None
+        test_before = loop_characteristics.get('testBefore', 'false') == 'true'
+        if maximum is None and condition is None:
+            self.raise_validation_exception('A loopMaximum or loopCondition must be specified for Loop Tasks')
 
-        multiinstance_element = first(self.xpath('./bpmn:multiInstanceLoopCharacteristics'))
-        if multiinstance_element is not None:
-            is_sequential = multiinstance_element.get('isSequential') == 'true'
+        original = self.spec.task_specs.pop(self.task.name)
+        self.task = self.STANDARD_LOOP_CLASS(self.spec, original.name, '', maximum, condition, test_before)
+        self._copy_task_attrs(original)
 
-            element_var_text = multiinstance_element.attrib.get('{' + CAMUNDA_MODEL_NS + '}elementVariable')
-            collection_text = multiinstance_element.attrib.get('{' + CAMUNDA_MODEL_NS + '}collection')
+    def _add_multiinstance_task(self, loop_characteristics):
 
-            loop_cardinality = first(self.xpath('./bpmn:multiInstanceLoopCharacteristics/bpmn:loopCardinality'))
-            if loop_cardinality is not None:
-                loop_count = loop_cardinality.text
-            elif collection_text is not None:
-                loop_count = collection_text
+        sequential = loop_characteristics.get('isSequential') == 'true'
+        prefix = 'bpmn:multiInstanceLoopCharacteristics'
+        cardinality = self.xpath(f'./{prefix}/bpmn:loopCardinality')
+        loop_input = self.xpath(f'./{prefix}/bpmn:loopDataInputRef')
+        if len(cardinality) == 0 and len(loop_input) == 0:
+            self.raise_validation_exception(
+                "A multiinstance task must specify a cardinality or a loop input data reference")
+        elif len(cardinality) > 0 and len(loop_input) > 0:
+            self.raise_validation_exception(
+                "A multiinstance task must specify exactly one of cardinality or loop input data reference")
+        cardinality = cardinality[0].text if len(cardinality) > 0 else None
+
+        loop_input = loop_input[0].text if len(loop_input) > 0 else None
+        if loop_input is not None:
+            if self.task.io_specification is not None:
+                try:
+                    loop_input = [v for v in self.task.io_specification.data_inputs if v.name == loop_input][0]
+                except Exception:
+                    self.raise_validation_exception('The loop input data reference is missing from the IO specification')
             else:
-                loop_count = '1'
+                loop_input = TaskDataReference(loop_input)
 
-            if collection_text is not None:
-                collection = PathAttrib(collection_text.replace('.', '/')) if collection_text.find('.') > 0 else Attrib(collection_text)
+        input_item = self.xpath(f'./{prefix}/bpmn:inputDataItem')
+        input_item = self.create_data_spec(input_item[0], TaskDataReference) if len(input_item) > 0 else None
+
+        loop_output = self.xpath(f'./{prefix}/bpmn:loopDataOutputRef')
+        loop_output = loop_output[0].text if len(loop_output) > 0 else None
+        if loop_output is not None:
+            if self.task.io_specification is not None:
+                try:
+                    refs = set(self.task.io_specification.data_inputs + self.task.io_specification.data_outputs)
+                    loop_output = [v for v in refs if v.name == loop_output][0]
+                except Exception:
+                    self.raise_validation_exception('The loop output data reference is missing from the IO specification')
             else:
-                collection = None
+                loop_output = TaskDataReference(loop_output)
 
-            completion_condition = first(self.xpath('./bpmn:multiInstanceLoopCharacteristics/bpmn:completionCondition'))
-            if completion_condition is not None:
-                completion_condition = completion_condition.text
+        output_item = self.xpath(f'./{prefix}/bpmn:outputDataItem')
+        output_item = self.create_data_spec(output_item[0], TaskDataReference) if len(output_item) > 0 else None
 
-            self._set_multiinstance_attributes(is_sequential, 1, loop_count,
-                                               element_var=element_var_text,
-                                               collection=collection,
-                                               completion_condition=completion_condition)
+        condition = self.xpath(f'./{prefix}/bpmn:completionCondition')
+        condition = condition[0].text if len(condition) > 0 else None
 
-        elif len(self.xpath('./bpmn:standardLoopCharacteristics')) > 0:
-            self._set_multiinstance_attributes(True, 25, STANDARDLOOPCOUNT, loop_task=True)
+        original = self.spec.task_specs.pop(self.task.name)
+        params = {
+            'task_spec': '',
+            'cardinality': cardinality,
+            'data_input': loop_input,
+            'data_output':loop_output,
+            'input_item': input_item,
+            'output_item': output_item,
+            'condition': condition,
+        }
+        if sequential:
+            self.task = self.SEQUENTIAL_MI_CLASS(self.spec, original.name, **params)
+        else:
+            self.task = self.PARALLEL_MI_CLASS(self.spec, original.name, **params)
+        self._copy_task_attrs(original)
 
     def _add_boundary_event(self, children):
 
         parent = _BoundaryEventParent(
-            self.spec, '%s.BoundaryEventParent' % self.get_id(),
+            self.spec, '%s.BoundaryEventParent' % self.bpmn_id,
             self.task, lane=self.task.lane)
         self.process_parser.parsed_nodes[self.node.get('id')] = parent
         parent.connect(self.task)
@@ -133,9 +169,7 @@ class TaskParser(NodeParser):
             child = self.process_parser.parse_node(event)
             if isinstance(child.event_definition, CancelEventDefinition) \
               and not isinstance(self.task, TransactionSubprocess):
-                raise ValidationException('Cancel Events may only be used with transactions',
-                                          node=self.node,
-                                          file_name=self.filename)
+                self.raise_validation_exception('Cancel Events may only be used with transactions')
             parent.connect(child)
         return parent
 
@@ -148,44 +182,45 @@ class TaskParser(NodeParser):
             # Why do we just set random attributes willy nilly everywhere in the code????
             # And we still pass around a gigantic kwargs dict whenever we create anything!
             self.task.extensions = self.parse_extensions()
-            self.task.documentation = self.parse_documentation()
-            # And now I have to add more of the same crappy thing.
-            self.task.data_input_associations = self.parse_incoming_data_references()
-            self.task.data_output_associations = self.parse_outgoing_data_references()
 
-            self._detect_multiinstance()
+            io_spec = self.xpath('./bpmn:ioSpecification')
+            if len(io_spec) > 0:
+                self.task.io_specification = self.parse_io_spec()
 
-            boundary_event_nodes = self.doc_xpath('.//bpmn:boundaryEvent[@attachedToRef="%s"]' % self.get_id())
+            loop_characteristics = self.xpath('./bpmn:standardLoopCharacteristics')
+            if len(loop_characteristics) > 0:
+                self._add_loop_task(loop_characteristics[0])
+
+            mi_loop_characteristics = self.xpath('./bpmn:multiInstanceLoopCharacteristics')
+            if len(mi_loop_characteristics) > 0:
+                self._add_multiinstance_task(mi_loop_characteristics[0])
+
+            boundary_event_nodes = self.doc_xpath('.//bpmn:boundaryEvent[@attachedToRef="%s"]' % self.bpmn_id)
             if boundary_event_nodes:
                 parent = self._add_boundary_event(boundary_event_nodes)
             else:
                 self.process_parser.parsed_nodes[self.node.get('id')] = self.task
 
             children = []
-            outgoing = self.doc_xpath('.//bpmn:sequenceFlow[@sourceRef="%s"]' % self.get_id())
+            outgoing = self.doc_xpath('.//bpmn:sequenceFlow[@sourceRef="%s"]' % self.bpmn_id)
             if len(outgoing) > 1 and not self.handles_multiple_outgoing():
-                raise ValidationException(
-                    'Multiple outgoing flows are not supported for '
-                    'tasks of type',
-                    node=self.node,
-                    file_name=self.filename)
+                self.raise_validation_exception('Multiple outgoing flows are not supported for tasks of type')
             for sequence_flow in outgoing:
                 target_ref = sequence_flow.get('targetRef')
                 try:
                     target_node = one(self.doc_xpath('.//bpmn:*[@id="%s"]'% target_ref))
-                except:
-                    raise ValidationException(
-                        'When looking for a task spec, we found two items, '
-                        'perhaps a form has the same ID? (%s)' % target_ref,
-                        node=self.node,
-                        file_name=self.filename)
+                except Exception:
+                    self.raise_validation_exception('When looking for a task spec, we found two items, '
+                        'perhaps a form has the same ID? (%s)' % target_ref)
 
                 c = self.process_parser.parse_node(target_node)
-                position = c.position
+                position = self.get_position(target_node)
                 children.append((position, c, target_node, sequence_flow))
 
             if children:
                 # Sort children by their y coordinate.
+                # Why??  Isn't the point of parallel tasks that they can be executed in any order (or simultaneously)?
+                # And what if they're arranged horizontally?
                 children = sorted(children, key=lambda tup: float(tup[0]["y"]))
 
                 default_outgoing = self.node.get('default')
@@ -207,17 +242,14 @@ class TaskParser(NodeParser):
         """
         Returns a unique task spec name for this task (or the targeted one)
         """
-        return target_ref or self.get_id()
+        return target_ref or self.bpmn_id
 
     def create_task(self):
         """
         Create an instance of the task appropriately. A subclass can override
         this method to get extra information from the node.
         """
-        return self.spec_class(self.spec, self.get_task_spec_name(),
-                               lane=self.lane,
-                               description=self.node.get('name', None),
-                               position=self.position)
+        return self.spec_class(self.spec, self.bpmn_id, **self.bpmn_attributes)
 
     def connect_outgoing(self, outgoing_task, sequence_flow_node, is_default):
         """
@@ -233,3 +265,4 @@ class TaskParser(NodeParser):
         outgoing sequence flows.
         """
         return False
+
