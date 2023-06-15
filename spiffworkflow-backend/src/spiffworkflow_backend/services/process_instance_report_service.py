@@ -329,6 +329,14 @@ class ProcessInstanceReportService:
         return return_value
 
     @classmethod
+    def builtin_columns_hidden_by_default(cls) -> list[ReportMetadataColumn]:
+        """Columns that are builtin but we do not want to display by default but users can select if desired."""
+        return_value: list[ReportMetadataColumn] = [
+            {"Header": "Last Updated", "accessor": "task_updated_at_in_seconds", "filterable": False},
+        ]
+        return return_value
+
+    @classmethod
     def system_report_column_options(cls) -> list[ReportMetadataColumn]:
         """Columns that are used with certain system reports."""
         return_value: list[ReportMetadataColumn] = [

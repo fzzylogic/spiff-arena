@@ -267,7 +267,7 @@ def process_instance_report_show(
 def process_instance_report_column_list(
     process_model_identifier: str | None = None,
 ) -> flask.wrappers.Response:
-    table_columns = ProcessInstanceReportService.builtin_column_options()
+    table_columns = ProcessInstanceReportService.builtin_column_options() + ProcessInstanceReportService.builtin_columns_hidden_by_default()
     system_report_column_options = ProcessInstanceReportService.system_report_column_options()
     columns_for_metadata_query = (
         db.session.query(ProcessInstanceMetadataModel.key)
