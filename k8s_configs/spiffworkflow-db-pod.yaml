@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -f /tmp/docker-compose-hcOp4buQV3/docker-compose.yml
+    kompose.version: 1.28.0 (c4137012e)
+  creationTimestamp: null
+  labels:
+    io.kompose.network/spiff-arena-default: "true"
+    io.kompose.service: spiffworkflow-db
+    app.kubernetes.io/name: spiffworkflow-db
+  name: spiffworkflow-db
+spec:
+  containers:
+    - env:
+        - name: MYSQL_DATABASE
+          value: spiffworkflow_backend_development
+        - name: MYSQL_ROOT_PASSWORD
+          value: my-secret-pw
+        - name: MYSQL_TCP_PORT
+          value: "8003"
+      image: mysql:8.0.29
+      livenessProbe:
+        exec:
+          command:
+            - mysql --user=root --password=my-secret-pw -e 'select 1' spiffworkflow_backend_development
+        failureThreshold: 10
+        periodSeconds: 10
+        timeoutSeconds: 5
+      name: spiffworkflow-db
+      ports:
+        - containerPort: 8003
+      resources: {}
+      securityContext:
+        capabilities:
+          add:
+            - SYS_NICE
+  restartPolicy: Never
+status: {}

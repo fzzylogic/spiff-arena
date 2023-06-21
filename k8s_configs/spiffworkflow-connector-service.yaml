@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -f /tmp/docker-compose-hcOp4buQV3/docker-compose.yml
+    kompose.version: 1.28.0 (c4137012e)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: spiffworkflow-connector
+    app.kubernetes.io/name: spiffworkflow-connector
+  name: spiffworkflow-connector
+spec:
+  ports:
+    - name: "8004"
+      port: 8004
+      targetPort: 8004
+  selector:
+    io.kompose.service: spiffworkflow-connector
+    app.kubernetes.io/name: spiffworkflow-connector
+status:
+  loadBalancer: {}

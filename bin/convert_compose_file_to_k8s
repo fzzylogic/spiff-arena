@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+function error_handler() {
+  >&2 echo "Exited with BAD EXIT CODE '${2}' in ${0} script at line: ${1}."
+  exit "$2"
+}
+trap 'error_handler ${LINENO} $?' ERR
+set -o errtrace -o errexit -o nounset -o pipefail
+
+clean="${1:-}"
+
+script_dir="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+
+output_dir="k8s_configs"
+docker_compose_file="${script_dir}/../docker-compose-mysql.yml"
+
+if [[ "$clean" == "true" ]]; then
+  rm -rf "$output_dir"
+fi
+
+mkdir -p "$output_dir"
+
+if ! command -v kompose >/dev/null; then
+  >&2 echo "ERROR: You must install kompose to run: https://kompose.io/installation/"
+  exit 1
+fi
+
+if [[ -z "${SPIFF_BACKEND_PORT:-}" ]]; then
+  export SPIFF_BACKEND_PORT=8000
+fi
+
+if [[ -z "${SPIFFWORKFLOW_FRONTEND_PORT:-}" ]]; then
+  export SPIFFWORKFLOW_FRONTEND_PORT=8001
+fi
+
+pushd "$output_dir" >/dev/null
+
+tmp_docker_compose="$(mktemp -d -t docker-compose-XXXXXXXXXX)/docker-compose.yml"
+docker compose -f "$docker_compose_file" config >"$tmp_docker_compose" && kompose convert -f "$tmp_docker_compose"
+
+while read -r file; do
+  # name=$(grep -E ' io.kompose.service:' "$file" | awk -F ':' '{print $NF}' || echo '' | sed -E 's/ /)
+  # echo "name: '${name}'"
+  perl -pi -e 's/^( *)(io\.kompose\.service: *)(.*)/\1\2\3\n\1app.kubernetes.io\/name: \3/g' "$file"
+done <<<"$(find . -type f)"
+
+popd >/dev/null

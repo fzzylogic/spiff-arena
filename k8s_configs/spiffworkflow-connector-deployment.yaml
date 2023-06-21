@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -f /tmp/docker-compose-hcOp4buQV3/docker-compose.yml
+    kompose.version: 1.28.0 (c4137012e)
+  creationTimestamp: null
+  labels:
+    io.kompose.service: spiffworkflow-connector
+    app.kubernetes.io/name: spiffworkflow-connector
+  name: spiffworkflow-connector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: spiffworkflow-connector
+      app.kubernetes.io/name: spiffworkflow-connector
+  strategy: {}
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert -f /tmp/docker-compose-hcOp4buQV3/docker-compose.yml
+        kompose.version: 1.28.0 (c4137012e)
+      creationTimestamp: null
+      labels:
+        io.kompose.network/spiff-arena-default: "true"
+        io.kompose.service: spiffworkflow-connector
+        app.kubernetes.io/name: spiffworkflow-connector
+    spec:
+      containers:
+        - env:
+            - name: CONNECTOR_PROXY_PORT
+              value: "8004"
+            - name: FLASK_DEBUG
+              value: "0"
+            - name: FLASK_ENV
+              value: development
+            - name: FLASK_SESSION_SECRET_KEY
+              value: super_secret_key
+          image: ghcr.io/sartography/connector-proxy-demo:latest
+          livenessProbe:
+            exec:
+              command:
+                - curl localhost:8004/liveness --fail
+            failureThreshold: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          name: spiffworkflow-connector
+          ports:
+            - containerPort: 8004
+          resources: {}
+      restartPolicy: Always
+status: {}
