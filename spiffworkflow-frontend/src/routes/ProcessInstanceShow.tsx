@@ -11,9 +11,13 @@ import {
   StopOutline,
   PauseOutline,
   PlayOutline,
+  Asterisk,
   InProgress,
+  SkipForward,
   Checkmark,
+  Play,
   Warning,
+  Edit,
   // @ts-ignore
 } from '@carbon/icons-react';
 import {
@@ -92,6 +96,7 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     `${params.process_model_id}`
   );
   const modifiedProcessModelId = params.process_model_id;
+  const useIconsMode = searchParams.get('i') === 'true';
 
   const { targetUris } = useUriListForPermissions();
   const taskListPath =
@@ -769,6 +774,48 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
     }
   };
 
+  const adminIcons = (
+    <>
+      <Button
+        kind="ghost"
+        data-qa="edit-process-model-button"
+        renderIcon={Edit}
+        iconDescription="Edit Process Model"
+        hasIconOnly
+        href={`/admin/process-models/${modifiedProcessModelId}/edit`}
+      >
+        Edit process model
+      </Button>
+      <Button
+        kind="ghost"
+        data-qa="publish-process-model-button"
+        renderIcon={SkipForward}
+        iconDescription="Skip Task"
+        hasIconOnly
+        title="Skip Task"
+        onClick={() => {}}
+      />
+      <Button
+        kind="ghost"
+        data-qa="publish-process-model-button"
+        renderIcon={Play}
+        iconDescription="Execute Task"
+        hasIconOnly
+        title="Execute Task"
+        onClick={() => {}}
+      />
+      <Button
+        kind="ghost"
+        data-qa="publish-process-model-button"
+        renderIcon={Asterisk}
+        iconDescription="Execute Task"
+        hasIconOnly
+        title="Send Event"
+        onClick={() => {}}
+      />
+    </>
+  );
+
   const taskDisplayButtons = (task: Task) => {
     const buttons = [];
 
@@ -829,6 +876,9 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
         </Button>
       );
     } else {
+      if (useIconsMode) {
+        return null;
+      }
       if (canEditTaskData(task)) {
         buttons.push(
           <Button
@@ -996,10 +1046,12 @@ export default function ProcessInstanceShow({ variant }: OwnProps) {
           onRequestClose={handleTaskDataDisplayClose}
         >
           <Stack orientation="horizontal" gap={2}>
-            <span title={taskTitleText}>{taskToUse.bpmn_identifier}</span> (
-            {taskToUse.typename}
-            ): {taskToUse.state}
-            {taskDisplayButtons(taskToUse)}
+            <span className="with-icons" title={taskTitleText}>
+              {taskToUse.bpmn_identifier} ({taskToUse.typename}
+              ): {taskToUse.state}
+              {taskDisplayButtons(taskToUse)}
+            </span>
+            {useIconsMode && adminIcons}
           </Stack>
           <div>
             <Stack orientation="horizontal" gap={2}>
