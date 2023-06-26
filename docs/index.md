@@ -1,8 +1,9 @@
 # Welcome to SpiffWorkflow's documentation
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 3
 :caption: Getting Started
+UsingSpiffdemo/Getting_Started.md
 learn_basics/learn_basics.md
 quick_start/quick_start.md
 ```
