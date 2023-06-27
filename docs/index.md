@@ -54,6 +54,13 @@ learn_basics/bpmn_terminology.md
 
 ```{toctree}
 :maxdepth: 3
+:caption: In Depth Topics
+in_depth_topics/sub-processes_and_call_activities.md
+
+```
+
+```{toctree}
+:maxdepth: 3
 :caption: Fix me unlinked files
 how_to/complete_a_task_on_behalf_of_another_user.md
 how_to/edit_process_variables.md
