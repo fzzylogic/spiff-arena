@@ -36,7 +36,7 @@ In order to locate the active Process Instance, have a look at these pages to fi
 👷‍♂️ Note that you need Admin rights to complete the following steps.
 ```
 
-[How to suspend a process](how_to\suspend_a_process.md)
+[How to suspend a process](resume_a_process.md)
 
 ### Step 4: Complete the task
 
