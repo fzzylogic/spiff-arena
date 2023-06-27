@@ -21,12 +21,11 @@ This enables a smooth continuation of the process from the initial user's perspe
 
 In order to locate the active Process Instance, have a look at these pages to find an active instance to suspend.
 
-[How to find an Instance assigned to someone else](https://www.notion.so/How-to-find-an-Instance-assigned-to-someone-else-59e45e944655411581d780cf7a010230?pvs=21) 
-[How to find an Instance assigned to myself](https://github.com/sartography/spiff-arena/blob/main/docs/how_to/find_an_Instance_assigned_to_myself.md)
+
 
 ### Step 2: Navigate to the active User Task
 
-[How to navigate to the active User Task](https://github.com/sartography/spiff-arena/blob/main/docs/how_to/navigate_to_an_active_process_instance.md) 
+[How to navigate to the active User Task](how_to\navigate_to_an_active_process_instance.md) 
 
 
 
@@ -37,7 +36,7 @@ In order to locate the active Process Instance, have a look at these pages to fi
 👷‍♂️ Note that you need Admin rights to complete the following steps.
 ```
 
-[How to suspend a process](how_to/resume_a_process.md#this_is_a_label)
+[How to suspend a process](how_to\suspend_a_process.md)
 
 ### Step 4: Complete the task
 
@@ -75,10 +74,6 @@ Select the highlighted activity. This will open a pop-up view of the Instance va
 
 | ✅ Success | 🚫 Error |
 | --- | --- |
-| With the current activity successfully completed and the workflow advanced to the next stage, the remaining steps of the process can now proceed smoothly. | In case of an error, consider adding a troubleshooting section for further assistance. |
----
+| With the current activity successfully completed and the workflow advanced to the next stage, the remaining steps of the process can now proceed smoothly. | In case of an error, consider adding a troubleshooting section for further assistance. |  
 
-## 👨‍🏫Examples
-
-[**Steps for Admin** **approving on behalf of Budget owner:** ]
 
