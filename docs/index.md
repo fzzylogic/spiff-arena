@@ -48,19 +48,22 @@ how_to/complete_a_task_on_behalf_of_another_user.md
 :maxdepth: 3
 :caption: In Depth Topics
 in_depth_topics/sub-processes_and_call_activities.md
+in_depth_topics/data_objects.md
 
 ```
 
 ```{toctree}
 :maxdepth: 3
 :caption: Installation and Integration
-installation_integration/configuration_settings.md
+installation_integration/admin_and_permissions.md
+installation_integration/permission_url.md
 
 ```
 
 ```{toctree}
 :maxdepth: 3
-:caption: Glossary
+:caption: Appendices
+appendices/bpmn_references.md
 glossary/glossary.md
 learn_basics/bpmn_terminology.md
 

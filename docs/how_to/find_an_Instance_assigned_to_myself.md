@@ -29,5 +29,5 @@
 
 If the Instance can not be find by searhing the list, follow these steps to search for the id
 
-[How to find an Instance assigned to someone else](https://github.com/sartography/spiff-arena/blob/main/docs/how_to/find_an_Instance_assigned_to_someone_else.md) 
+[How to find an Instance assigned to someone else](find_an_instance_assigned_to_someone_else.md) 
 

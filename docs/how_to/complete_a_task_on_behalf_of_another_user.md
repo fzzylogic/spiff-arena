@@ -25,7 +25,7 @@ In order to locate the active Process Instance, have a look at these pages to fi
 
 ### Step 2: Navigate to the active User Task
 
-[How to navigate to the active User Task](how_to\navigate_to_an_active_process_instance.md) 
+[How to navigate to the active User Task](navigate_to_an_active_process_instance.md) 
 
 
 

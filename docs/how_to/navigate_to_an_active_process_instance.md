@@ -2,8 +2,8 @@
 
 | ⚙ How do I get there \| Menu hierarchy |
 | ------------------------------------ |
-| [How to find an Instance assigned to someone else](find_an_Instance_assigned_to_someone_else.md) 
-[How to find an Instance assigned to myself](find_an_Instance_assigned_to_myself.md)|      |
+| [How to find an Instance assigned to someone else](find_an_instance_assigned_to_someone_else.md) 
+[How to find an Instance assigned to myself](find_an_instance_assigned_to_myself.md)|      |
 ---
 
 ## 📔How to guide

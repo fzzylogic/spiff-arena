@@ -18,8 +18,8 @@ If an instance is not active, it indicates that the process has already been com
 
 In order to locate the active Process Instance, have a look at these pages to find an active instance to suspend.
 
-[How to find an Instance assigned to someone else](https://www.notion.so/How-to-find-an-Instance-assigned-to-someone-else-59e45e944655411581d780cf7a010230?pvs=21) 
-[How to find an Instance assigned to myself](https://github.com/sartography/spiff-arena/blob/main/docs/how_to/find_an_Instance_assigned_to_myself.md)
+[How to find an Instance assigned to someone else](find_an_instance_assigned_to_someone_else.md) 
+[How to find an Instance assigned to myself](find_an_instance_assigned_to_myself.md)
 
 ### **Step 2: Locate Icon** 
 
@@ -37,7 +37,7 @@ In order to locate the active Process Instance, have a look at these pages to fi
 
 | ✅ Success                                                     | 🚫 Error |
 | ------------------------------------------------------------- | ------- |
-| Confirm that the status has changed from ‘user_input_required’ to ‘suspended’ ![suspend_status](images/suspended.png) [Helpful links to guide next step](https://github.com/sartography/spiff-arena/blob/main/docs/how_to/resume_a_process.md) |None|
+| Confirm that the status has changed from ‘user_input_required’ to ‘suspended’ ![suspend_status](images/suspended.png) [Helpful links to guide next step](resume_a_process.md) |None|
 
 
 
