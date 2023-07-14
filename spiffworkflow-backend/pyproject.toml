@@ -18,7 +18,7 @@ Changelog = "https://github.com/sartography/spiffworkflow-backend/releases"
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
 click = "^8.0.1"
-flask = "2.2.2"
+flask = "2.2.5"
 flask-admin = "*"
 flask-bcrypt = "*"
 flask-cors = "*"
@@ -30,11 +30,10 @@ flask-restful = "*"
 flask-simple-crypt = "^0.3.3"
 werkzeug = "*"
 SpiffWorkflow = {git = "https://github.com/sartography/SpiffWorkflow", rev = "main"}
-# SpiffWorkflow = {git = "https://github.com/sartography/SpiffWorkflow", rev = "6cad2981712bb61eca23af1adfafce02d3277cb9"}
 # SpiffWorkflow = {develop = true, path = "../../spiffworkflow/" }
+# SpiffWorkflow = {develop = true, path = "../../SpiffWorkflow/" }
 sentry-sdk = "^1.10"
 # sphinx-autoapi = "^2.0"
-mysql-connector-python = "*"
 pytest-flask = "^1.2.0"
 pytest-flask-sqlalchemy = "^1.1.0"
 psycopg2 = "^2.9.3"
@@ -83,6 +82,11 @@ prometheus-flask-exporter = "^0.22.3"
 sqlalchemy = "^2.0.7"
 marshmallow-sqlalchemy = "^0.29.0"
 spiff-element-units = "^0.3.0"
+pytest-xdist = "^3.3.1"
+
+# mysqlclient lib is deemed better than the mysql-connector-python lib by sqlalchemy
+# https://docs.sqlalchemy.org/en/20/dialects/mysql.html#module-sqlalchemy.dialects.mysql.mysqlconnector
+mysqlclient = "^2.2.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.2"
@@ -168,6 +172,7 @@ explicit_package_bases = false
 [tool.ruff]
 select = [
   "B",   # flake8-bugbear
+  "C",   # mccabe
   "E",   # pycodestyle error
   # "ERA",  # eradicate
   "F",   # pyflakes
@@ -180,6 +185,7 @@ select = [
 ]
 
 ignore = [
+  "C901",  # "complexity" category
   "PLR",  # "refactoring" category has "too many lines in method" type stuff
   "PLC1901",
   "PLE1205"  # saw this Too many arguments for `logging` format string give a false positive once

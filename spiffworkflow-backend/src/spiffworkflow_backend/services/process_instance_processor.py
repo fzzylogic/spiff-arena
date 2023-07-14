@@ -6,7 +6,9 @@ import logging
 import os
 import re
 import time
+import uuid
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import datetime
 from datetime import timedelta
 from hashlib import sha256
@@ -40,6 +42,7 @@ from SpiffWorkflow.spiff.serializer.config import SPIFF_SPEC_CONFIG  # type: ign
 from SpiffWorkflow.task import Task as SpiffTask  # type: ignore
 from SpiffWorkflow.task import TaskState
 from SpiffWorkflow.util.deep_merge import DeepMerge  # type: ignore
+from spiffworkflow_backend.data_stores.typeahead import TypeaheadDataStore
 from spiffworkflow_backend.exceptions.api_error import ApiError
 from spiffworkflow_backend.models.bpmn_process import BpmnProcessModel
 from spiffworkflow_backend.models.bpmn_process_definition import BpmnProcessDefinitionModel
@@ -68,6 +71,7 @@ from spiffworkflow_backend.scripts.script import Script
 from spiffworkflow_backend.services.custom_parser import MyCustomParser
 from spiffworkflow_backend.services.element_units_service import ElementUnitsService
 from spiffworkflow_backend.services.file_system_service import FileSystemService
+from spiffworkflow_backend.services.jinja_service import JinjaHelpers
 from spiffworkflow_backend.services.process_instance_queue_service import ProcessInstanceQueueService
 from spiffworkflow_backend.services.process_instance_tmp_service import ProcessInstanceTmpService
 from spiffworkflow_backend.services.process_model_service import ProcessModelService
@@ -75,7 +79,9 @@ from spiffworkflow_backend.services.service_task_service import ServiceTaskDeleg
 from spiffworkflow_backend.services.spec_file_service import SpecFileService
 from spiffworkflow_backend.services.task_service import TaskService
 from spiffworkflow_backend.services.user_service import UserService
+from spiffworkflow_backend.services.workflow_execution_service import ExecutionStrategy
 from spiffworkflow_backend.services.workflow_execution_service import ExecutionStrategyNotConfiguredError
+from spiffworkflow_backend.services.workflow_execution_service import SkipOneExecutionStrategy
 from spiffworkflow_backend.services.workflow_execution_service import TaskModelSavingDelegate
 from spiffworkflow_backend.services.workflow_execution_service import WorkflowExecutionService
 from spiffworkflow_backend.services.workflow_execution_service import execution_strategy_named
@@ -83,6 +89,7 @@ from spiffworkflow_backend.specs.start_event import StartEvent
 from sqlalchemy import and_
 
 StartEvent.register_converter(SPIFF_SPEC_CONFIG)
+TypeaheadDataStore.register_converter(SPIFF_SPEC_CONFIG)
 
 # Sorry about all this crap.  I wanted to move this thing to another file, but
 # importing a bunch of types causes circular imports.
@@ -133,7 +140,7 @@ class BoxedTaskDataBasedScriptEngineEnvironment(BoxedTaskDataEnvironment):  # ty
         return {}
 
     def last_result(self) -> dict[str, Any]:
-        return {k: v for k, v in self._last_result.items()}
+        return dict(self._last_result.items())
 
     def clear_state(self) -> None:
         pass
@@ -211,7 +218,7 @@ class NonTaskDataBasedScriptEngineEnvironment(BasePythonScriptEngineEnvironment)
         return {k: v for k, v in self.state.items() if k not in keys_to_filter and not callable(v)}
 
     def last_result(self) -> dict[str, Any]:
-        return {k: v for k, v in self.state.items()}
+        return dict(self.state.items())
 
     def clear_state(self) -> None:
         self.state = {}
@@ -277,6 +284,8 @@ class CustomBpmnScriptEngine(PythonScriptEngine):  # type: ignore
             "sum": sum,
             "time": time,
             "timedelta": timedelta,
+            "uuid": uuid,
+            **JinjaHelpers.get_helper_mapping(),
         }
 
         use_restricted_script_engine = True
@@ -348,7 +357,9 @@ class CustomBpmnScriptEngine(PythonScriptEngine):  # type: ignore
             methods = self.__get_augment_methods(task)
             if external_methods:
                 methods.update(external_methods)
-            super().execute(task, script, methods)
+            # do not run script if it is blank
+            if script:
+                super().execute(task, script, methods)
             return True
         except WorkflowException as e:
             raise e
@@ -764,29 +775,33 @@ class ProcessInstanceProcessor:
         lane_assignment_id = None
         if re.match(r"(process.?)initiator", task_lane, re.IGNORECASE):
             potential_owner_ids = [self.process_instance_model.process_initiator_id]
-        elif "lane_owners" in task.data and task_lane in task.data["lane_owners"]:
-            for username in task.data["lane_owners"][task_lane]:
-                lane_owner_user = UserModel.query.filter_by(username=username).first()
-                if lane_owner_user is not None:
-                    potential_owner_ids.append(lane_owner_user.id)
-            self.raise_if_no_potential_owners(
-                potential_owner_ids,
-                (
-                    "No users found in task data lane owner list for lane:"
-                    f" {task_lane}. The user list used:"
-                    f" {task.data['lane_owners'][task_lane]}"
-                ),
-            )
         else:
             group_model = GroupModel.query.filter_by(identifier=task_lane).first()
-            if group_model is None:
-                raise (NoPotentialOwnersForTaskError(f"Could not find a group with name matching lane: {task_lane}"))
-            potential_owner_ids = [i.user_id for i in group_model.user_group_assignments]
-            lane_assignment_id = group_model.id
-            self.raise_if_no_potential_owners(
-                potential_owner_ids,
-                f"Could not find any users in group to assign to lane: {task_lane}",
-            )
+            if group_model is not None:
+                lane_assignment_id = group_model.id
+            if "lane_owners" in task.data and task_lane in task.data["lane_owners"]:
+                for username in task.data["lane_owners"][task_lane]:
+                    lane_owner_user = UserModel.query.filter_by(username=username).first()
+                    if lane_owner_user is not None:
+                        potential_owner_ids.append(lane_owner_user.id)
+                self.raise_if_no_potential_owners(
+                    potential_owner_ids,
+                    (
+                        "No users found in task data lane owner list for lane:"
+                        f" {task_lane}. The user list used:"
+                        f" {task.data['lane_owners'][task_lane]}"
+                    ),
+                )
+            else:
+                if group_model is None:
+                    raise (
+                        NoPotentialOwnersForTaskError(f"Could not find a group with name matching lane: {task_lane}")
+                    )
+                potential_owner_ids = [i.user_id for i in group_model.user_group_assignments]
+                self.raise_if_no_potential_owners(
+                    potential_owner_ids,
+                    f"Could not find any users in group to assign to lane: {task_lane}",
+                )
 
         return {
             "potential_owner_ids": potential_owner_ids,
@@ -1007,7 +1022,7 @@ class ProcessInstanceProcessor:
 
                 # in the xml, it's the id attribute. this identifies the process where the activity lives.
                 # if it's in a subprocess, it's the inner process.
-                bpmn_process_identifier = ready_or_waiting_task.workflow.name
+                bpmn_process_identifier = ready_or_waiting_task.workflow.spec.name
 
                 form_file_name = None
                 ui_form_file_name = None
@@ -1070,9 +1085,6 @@ class ProcessInstanceProcessor:
         event_definition = self._event_serializer.registry.restore(event_data)
         if payload is not None:
             event_definition.payload = payload
-        current_app.logger.info(
-            f"Event of type {event_definition.event_type} sent to process instance {self.process_instance_model.id}"
-        )
         try:
             self.bpmn_process_instance.catch(event_definition)
         except Exception as e:
@@ -1085,8 +1097,12 @@ class ProcessInstanceProcessor:
         """Mark the task complete optionally executing it."""
         spiff_task = self.bpmn_process_instance.get_task_from_id(UUID(task_id))
         event_type = ProcessInstanceEventType.task_skipped.value
+        if execute:
+            event_type = ProcessInstanceEventType.task_executed_manually.value
+
         start_time = time.time()
 
+        # manual actually means any human task
         if spiff_task.task_spec.manual:
             # Executing or not executing a human task results in the same state.
             current_app.logger.info(
@@ -1103,7 +1119,15 @@ class ProcessInstanceProcessor:
             self.do_engine_steps(save=True, execution_strategy_name="one_at_a_time")
         else:
             current_app.logger.info(f"Skipped task {spiff_task.task_spec.name}", extra=spiff_task.log_info())
-            self.do_engine_steps(save=True, execution_strategy_name="skip_one")
+            task_model_delegate = TaskModelSavingDelegate(
+                serializer=self._serializer,
+                process_instance=self.process_instance_model,
+                bpmn_definition_to_task_definitions_mappings=self.bpmn_definition_to_task_definitions_mappings,
+            )
+            execution_strategy = SkipOneExecutionStrategy(
+                task_model_delegate, self.lazy_load_subprocess_specs, {"spiff_task": spiff_task}
+            )
+            self.do_engine_steps(save=True, execution_strategy=execution_strategy)
 
         spiff_tasks = self.bpmn_process_instance.get_tasks()
         task_service = TaskService(
@@ -1329,7 +1353,7 @@ class ProcessInstanceProcessor:
         for task in tasks:
             if task.task_spec.description != "Call Activity":
                 continue
-            spec_to_check = task.task_spec.spec
+            spec_to_check = task.task_spec.bpmn_id
 
             if spec_to_check not in loaded_specs:
                 lazy_subprocess_specs = self.element_unit_specs_loader(spec_to_check, spec_to_check)
@@ -1350,18 +1374,20 @@ class ProcessInstanceProcessor:
         exit_at: None = None,
         save: bool = False,
         execution_strategy_name: str | None = None,
+        execution_strategy: ExecutionStrategy | None = None,
     ) -> None:
         with ProcessInstanceQueueService.dequeued(self.process_instance_model):
             # TODO: ideally we just lock in the execution service, but not sure
             # about _add_bpmn_process_definitions and if that needs to happen in
             # the same lock like it does on main
-            self._do_engine_steps(exit_at, save, execution_strategy_name)
+            self._do_engine_steps(exit_at, save, execution_strategy_name, execution_strategy)
 
     def _do_engine_steps(
         self,
         exit_at: None = None,
         save: bool = False,
         execution_strategy_name: str | None = None,
+        execution_strategy: ExecutionStrategy | None = None,
     ) -> None:
         self._add_bpmn_process_definitions()
 
@@ -1371,16 +1397,17 @@ class ProcessInstanceProcessor:
             bpmn_definition_to_task_definitions_mappings=self.bpmn_definition_to_task_definitions_mappings,
         )
 
-        if execution_strategy_name is None:
-            execution_strategy_name = current_app.config["SPIFFWORKFLOW_BACKEND_ENGINE_STEP_DEFAULT_STRATEGY_WEB"]
-        if execution_strategy_name is None:
-            raise ExecutionStrategyNotConfiguredError(
-                "SPIFFWORKFLOW_BACKEND_ENGINE_STEP_DEFAULT_STRATEGY_WEB has not been set"
+        if execution_strategy is None:
+            if execution_strategy_name is None:
+                execution_strategy_name = current_app.config["SPIFFWORKFLOW_BACKEND_ENGINE_STEP_DEFAULT_STRATEGY_WEB"]
+            if execution_strategy_name is None:
+                raise ExecutionStrategyNotConfiguredError(
+                    "SPIFFWORKFLOW_BACKEND_ENGINE_STEP_DEFAULT_STRATEGY_WEB has not been set"
+                )
+            execution_strategy = execution_strategy_named(
+                execution_strategy_name, task_model_delegate, self.lazy_load_subprocess_specs
             )
 
-        execution_strategy = execution_strategy_named(
-            execution_strategy_name, task_model_delegate, self.lazy_load_subprocess_specs
-        )
         execution_service = WorkflowExecutionService(
             self.bpmn_process_instance,
             self.process_instance_model,
@@ -1532,7 +1559,14 @@ class ProcessInstanceProcessor:
             )
 
         task_model.start_in_seconds = time.time()
-        self.bpmn_process_instance.run_task_from_id(spiff_task.id)
+        task_exception = None
+        task_event = ProcessInstanceEventType.task_completed.value
+        try:
+            self.bpmn_process_instance.run_task_from_id(spiff_task.id)
+        except Exception as ex:
+            task_exception = ex
+            task_event = ProcessInstanceEventType.task_failed.value
+
         task_model.end_in_seconds = time.time()
 
         human_task.completed_by_user_id = user.id
@@ -1550,14 +1584,27 @@ class ProcessInstanceProcessor:
 
         ProcessInstanceTmpService.add_event_to_process_instance(
             self.process_instance_model,
-            ProcessInstanceEventType.task_completed.value,
+            task_event,
             task_guid=task_model.guid,
             user_id=user.id,
+            exception=task_exception,
         )
-        task_service.process_parents_and_children_and_save_to_database(spiff_task)
+
+        # children of a multi-instance task has the attribute "triggered" set to True
+        # so use that to determine if a spiff_task is apart of a multi-instance task
+        # and therefore we need to process its parent since the current task will not
+        # know what is actually going on.
+        # Basically "triggered" means "this task is not part of the task spec outputs"
+        spiff_task_to_process = spiff_task
+        if spiff_task_to_process.triggered is True:
+            spiff_task_to_process = spiff_task.parent
+        task_service.process_parents_and_children_and_save_to_database(spiff_task_to_process)
 
         # this is the thing that actually commits the db transaction (on behalf of the other updates above as well)
         self.save()
+
+        if task_exception is not None:
+            raise task_exception
 
     def get_data(self) -> dict[str, Any]:
         return self.bpmn_process_instance.data  # type: ignore
@@ -1628,7 +1675,7 @@ class ProcessInstanceProcessor:
                 return task
         return None
 
-    def terminate(self) -> None:
+    def remove_spiff_tasks_for_termination(self) -> None:
         start_time = time.time()
         deleted_tasks = self.bpmn_process_instance.cancel() or []
         spiff_tasks = self.bpmn_process_instance.get_tasks()
@@ -1655,6 +1702,10 @@ class ProcessInstanceProcessor:
             db.session.delete(task)
 
         self.save()
+
+    def terminate(self) -> None:
+        with suppress(KeyError):
+            self.remove_spiff_tasks_for_termination()
         self.process_instance_model.status = "terminated"
         db.session.add(self.process_instance_model)
         ProcessInstanceTmpService.add_event_to_process_instance(

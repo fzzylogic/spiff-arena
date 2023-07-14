@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-// @ts-ignore
 import { Tabs, TabList, Tab } from '@carbon/react';
 import TaskShow from './TaskShow';
 import MyTasks from './MyTasks';
@@ -48,7 +47,7 @@ export default function HomePageRoutes() {
   };
 
   return (
-    <>
+    <div className="fixed-width-container">
       {renderTabs()}
       <Routes>
         <Route path="/" element={<InProgressInstances />} />
@@ -58,6 +57,6 @@ export default function HomePageRoutes() {
         <Route path="completed-instances" element={<CompletedInstances />} />
         <Route path="create-new-instance" element={<CreateNewInstance />} />
       </Routes>
-    </>
+    </div>
   );
 }

@@ -15,9 +15,7 @@ import {
   HeaderMenuItem,
   HeaderGlobalAction,
   HeaderGlobalBar,
-  // @ts-ignore
 } from '@carbon/react';
-// @ts-ignore
 import { Logout, Login } from '@carbon/icons-react';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -32,7 +30,6 @@ import { UnauthenticatedError } from '../services/HttpService';
 import { DOCUMENTATION_URL, SPIFF_ENVIRONMENT } from '../config';
 import appVersionInfo from '../helpers/appVersionInfo';
 
-// for ref: https://react-bootstrap.github.io/components/navbar/
 export default function NavigationBar() {
   const handleLogout = () => {
     UserService.doLogout();
@@ -55,6 +52,7 @@ export default function NavigationBar() {
     [targetUris.authenticationListPath]: ['GET'],
     [targetUris.messageInstanceListPath]: ['GET'],
     [targetUris.secretListPath]: ['GET'],
+    [targetUris.dataStoreListPath]: ['GET'],
   };
   const { ability } = usePermissionFetcher(permissionRequestData);
 
@@ -79,6 +77,8 @@ export default function NavigationBar() {
       newActiveKey = '/admin/process-instances';
     } else if (location.pathname.match(/^\/admin\/configuration\b/)) {
       newActiveKey = '/admin/configuration';
+    } else if (location.pathname.match(/^\/admin\/data-stores\b/)) {
+      newActiveKey = '/admin/data-stores';
     } else if (location.pathname === '/') {
       newActiveKey = '/';
     } else if (location.pathname.match(/^\/tasks\b/)) {
@@ -231,14 +231,15 @@ export default function NavigationBar() {
             Messages
           </HeaderMenuItem>
         </Can>
+        <Can I="GET" a={targetUris.dataStoreListPath} ability={ability}>
+          <HeaderMenuItem
+            href="/admin/data-stores"
+            isCurrentPage={isActivePage('/admin/data-stores')}
+          >
+            Data Stores
+          </HeaderMenuItem>
+        </Can>
         {configurationElement()}
-        <HeaderMenuItem
-          hidden
-          href="/admin/process-instances/reports"
-          isCurrentPage={isActivePage('/admin/process-instances/reports')}
-        >
-          Perspectives
-        </HeaderMenuItem>
       </>
     );
   };

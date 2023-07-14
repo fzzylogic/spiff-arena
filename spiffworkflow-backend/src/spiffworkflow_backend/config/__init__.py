@@ -10,6 +10,7 @@ from werkzeug.utils import ImportStringError
 from spiffworkflow_backend.services.logging_service import setup_logger
 
 HTTP_REQUEST_TIMEOUT_SECONDS = 15
+CONNECTOR_PROXY_COMMAND_TIMEOUT = 45
 
 
 class ConfigurationError(Exception):
@@ -17,11 +18,16 @@ class ConfigurationError(Exception):
 
 
 def setup_database_configs(app: Flask) -> None:
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    parallel_test_suffix = ""
+    if worker_id is not None:
+        parallel_test_suffix = f"_{worker_id}"
+
     if app.config.get("SPIFFWORKFLOW_BACKEND_DATABASE_URI") is None:
         database_name = f"spiffworkflow_backend_{app.config['ENV_IDENTIFIER']}"
         if app.config.get("SPIFFWORKFLOW_BACKEND_DATABASE_TYPE") == "sqlite":
             app.config["SQLALCHEMY_DATABASE_URI"] = (
-                f"sqlite:///{app.instance_path}/db_{app.config['ENV_IDENTIFIER']}.sqlite3"
+                f"sqlite:///{app.instance_path}/db_{app.config['ENV_IDENTIFIER']}{parallel_test_suffix}.sqlite3"
             )
         elif app.config.get("SPIFFWORKFLOW_BACKEND_DATABASE_TYPE") == "postgres":
             app.config["SQLALCHEMY_DATABASE_URI"] = (
@@ -32,7 +38,7 @@ def setup_database_configs(app: Flask) -> None:
             db_pswd = app.config.get("SPIFFWORKFLOW_BACKEND_DATABASE_PASSWORD")
             if db_pswd is None:
                 db_pswd = ""
-            app.config["SQLALCHEMY_DATABASE_URI"] = f"mysql+mysqlconnector://root:{db_pswd}@localhost/{database_name}"
+            app.config["SQLALCHEMY_DATABASE_URI"] = f"mysql+mysqldb://root:{db_pswd}@127.0.0.1/{database_name}"
     else:
         app.config["SQLALCHEMY_DATABASE_URI"] = app.config.get("SPIFFWORKFLOW_BACKEND_DATABASE_URI")
 
@@ -178,6 +184,10 @@ def setup_config(app: Flask) -> None:
 
     if app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"] == "":
         app.config["SPIFFWORKFLOW_BACKEND_DEFAULT_USER_GROUP"] = None
+
+    app.config["MAX_INSTANCE_LOCK_DURATION_IN_SECONDS"] = int(
+        app.config["SPIFFWORKFLOW_BACKEND_MAX_INSTANCE_LOCK_DURATION_IN_SECONDS"]
+    )
 
     thread_local_data = threading.local()
     app.config["THREAD_LOCAL_DATA"] = thread_local_data

@@ -46,9 +46,10 @@ import KeyboardMoveModule from 'diagram-js/lib/navigation/keyboard-move';
 // @ts-expect-error TS(7016) FIXME
 import MoveCanvasModule from 'diagram-js/lib/navigation/movecanvas';
 // @ts-expect-error TS(7016) FIXME
-import TouchModule from 'diagram-js/lib/navigation/touch';
-// @ts-expect-error TS(7016) FIXME
 import ZoomScrollModule from 'diagram-js/lib/navigation/zoomscroll';
+
+// @ts-expect-error TS(7016) FIXME
+import TouchModule from 'diagram-js/lib/navigation/touch';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -91,6 +92,8 @@ type OwnProps = {
   activeUserElement?: React.ReactElement;
 };
 
+const FitViewport = 'fit-viewport';
+
 // https://codesandbox.io/s/quizzical-lake-szfyo?file=/src/App.js was a handy reference
 export default function ReactDiagramEditor({
   processModelId,
@@ -124,10 +127,18 @@ export default function ReactDiagramEditor({
   const alreadyImportedXmlRef = useRef(false);
 
   const { targetUris } = useUriListForPermissions();
-  const permissionRequestData: PermissionsToCheck = {
-    [targetUris.processModelShowPath]: ['PUT'],
-    [targetUris.processModelFileShowPath]: ['POST', 'GET', 'PUT', 'DELETE'],
-  };
+  const permissionRequestData: PermissionsToCheck = {};
+
+  if (diagramType !== 'readonly') {
+    permissionRequestData[targetUris.processModelShowPath] = ['PUT'];
+    permissionRequestData[targetUris.processModelFileShowPath] = [
+      'POST',
+      'GET',
+      'PUT',
+      'DELETE',
+    ];
+  }
+
   const { ability } = usePermissionFetcher(permissionRequestData);
   const navigate = useNavigate();
 
@@ -414,13 +425,7 @@ export default function ReactDiagramEditor({
       }
 
       const canvas = (modeler as any).get('canvas');
-
-      // only get the canvas if the dmn active viewer is actually
-      // a Modeler and not an Editor which is what it will when we are
-      // actively editing a decision table
-      if ((modeler as any).constructor.name === 'Modeler') {
-        canvas.zoom('fit-viewport');
-      }
+      canvas.zoom(FitViewport, 'auto'); // Concerned this might bug out somehow.
 
       // highlighting a field
       // Option 3 at:
@@ -459,11 +464,37 @@ export default function ReactDiagramEditor({
       if (alreadyImportedXmlRef.current) {
         return;
       }
-      diagramModelerToUse.importXML(diagramXMLToDisplay).then(() => {
-        if (diagramType === 'bpmn' || diagramType === 'readonly') {
-          diagramModelerToUse.get('canvas').zoom('fit-viewport');
-        }
-      });
+      if (diagramType === 'bpmn') {
+        diagramModelerToUse._moddle // eslint-disable-line no-underscore-dangle
+          .fromXML(diagramXMLToDisplay)
+          .then((result: any) => {
+            const refs = result.references.filter(
+              (r: any) =>
+                r.property === 'bpmn:loopDataInputRef' ||
+                r.property === 'bpmn:loopDataOutputRef'
+            );
+            const desc =
+              diagramModelerToUse._moddle.registry.getEffectiveDescriptor( // eslint-disable-line
+                'bpmn:ItemAwareElement'
+              );
+            refs.forEach((ref: any) => {
+              const props = {
+                id: ref.id,
+                name: ref.id ? typeof ref.name === 'undefined' : ref.name,
+              };
+              const elem = diagramModelerToUse._moddle.create(desc, props); // eslint-disable-line no-underscore-dangle
+              elem.$parent = ref.element;
+              ref.element.set(ref.property, elem);
+            });
+            diagramModelerToUse.importDefinitions(result.rootElement);
+            console.log(
+              'Zooming the viewport for bpmn at the end of displayDiagram'
+            );
+            diagramModelerToUse.get('canvas').zoom(FitViewport, 'auto');
+          });
+      } else {
+        diagramModelerToUse.importXML(diagramXMLToDisplay);
+      }
 
       alreadyImportedXmlRef.current = true;
     }
@@ -489,7 +520,6 @@ export default function ReactDiagramEditor({
         successCallback: setDiagramXMLStringFromResponseJson,
       });
     }
-
     (diagramModelerState as any).on('import.done', onImportDone);
 
     const diagramXMLToUse = diagramXML || diagramXMLString;

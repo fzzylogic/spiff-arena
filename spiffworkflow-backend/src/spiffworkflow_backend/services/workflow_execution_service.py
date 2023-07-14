@@ -76,9 +76,12 @@ SubprocessSpecLoader = Callable[[], dict[str, Any] | None]
 class ExecutionStrategy:
     """Interface of sorts for a concrete execution strategy."""
 
-    def __init__(self, delegate: EngineStepDelegate, subprocess_spec_loader: SubprocessSpecLoader):
+    def __init__(
+        self, delegate: EngineStepDelegate, subprocess_spec_loader: SubprocessSpecLoader, options: dict | None = None
+    ):
         self.delegate = delegate
         self.subprocess_spec_loader = subprocess_spec_loader
+        self.options = options
 
     @abstractmethod
     def spiff_run(self, bpmn_process_instance: BpmnWorkflow, exit_at: None = None) -> None:
@@ -91,7 +94,7 @@ class ExecutionStrategy:
         self.delegate.save(bpmn_process_instance)
 
     def get_ready_engine_steps(self, bpmn_process_instance: BpmnWorkflow) -> list[SpiffTask]:
-        tasks = list([t for t in bpmn_process_instance.get_tasks(TaskState.READY) if not t.task_spec.manual])
+        tasks = [t for t in bpmn_process_instance.get_tasks(TaskState.READY) if not t.task_spec.manual]
 
         if len(tasks) > 0:
             self.subprocess_spec_loader()
@@ -336,9 +339,14 @@ class SkipOneExecutionStrategy(ExecutionStrategy):
     """When you want to to skip over the next task, rather than execute it."""
 
     def spiff_run(self, bpmn_process_instance: BpmnWorkflow, exit_at: None = None) -> None:
-        engine_steps = self.get_ready_engine_steps(bpmn_process_instance)
-        if len(engine_steps) > 0:
-            spiff_task = engine_steps[0]
+        spiff_task = None
+        if self.options and "spiff_task" in self.options.keys():
+            spiff_task = self.options["spiff_task"]
+        else:
+            engine_steps = self.get_ready_engine_steps(bpmn_process_instance)
+            if len(engine_steps) > 0:
+                spiff_task = engine_steps[0]
+        if spiff_task is not None:
             self.delegate.will_complete_task(spiff_task)
             spiff_task.complete()
             self.delegate.did_complete_task(spiff_task)
@@ -451,7 +459,6 @@ class WorkflowExecutionService:
     def queue_waiting_receive_messages(self) -> None:
         waiting_events = self.bpmn_process_instance.waiting_events()
         waiting_message_events = filter(lambda e: e["event_type"] == "MessageEventDefinition", waiting_events)
-
         for event in waiting_message_events:
             # Ensure we are only creating one message instance for each waiting message
             if (
