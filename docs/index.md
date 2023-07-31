@@ -3,65 +3,62 @@
 ```{toctree}
 :maxdepth: 3
 :caption: Getting Started
-UsingSpiffdemo/Getting_Started.md
-learn_basics/learn_basics.md
 quick_start/quick_start.md
-UsingSpiffdemo/Basic_Tools.md
 ```
 
 ```{toctree}
-:maxdepth: 2
-:caption: Administration
-admin_guide/admin_guide.md
+:maxdepth: 3
+:caption: Building Diagrams
+UsingSpiffdemo/Using_SpiffArena.md
+learn_basics/learn_basics.md
+bpmn/bpmn.md
+UsingSpiffdemo/Displaying_Content.md
+UsingSpiffdemo/Forms.md
+bpmn/gateways.md
+UsingSpiffdemo/Script_Tasks.md
+bpmn/sub-processes_and_call_activities.md
+bpmn/data_objects.md
+bpmn/dmn.md
+```
+
+```{toctree}
+:maxdepth: 3
+:caption: Debugging Diagrams
 validating_processes/bpmn_unit_tests.md
 ```
 
 ```{toctree}
-:maxdepth: 2
-:caption: DevOps
+:maxdepth: 3
+:caption: DevOps - Installation & Integration
+installation_integration/admin_and_permissions.md
+installation_integration/permission_url.md
 devops_guide/configure_connector_proxy.md
 devops_guide/deploy_aws_lambda.md
 ```
-
-```{toctree}
-:maxdepth: 2
-:caption: Contributing
-documentation/documentation.md
-wish_list/wish_list.md
-```
-
 ```{toctree}
 :maxdepth: 3
-:caption: Spiffworkflow
-spiffworkflow/navigating-spiffworkflow.md
-spiffworkflow/creatingbpmn.md
-spiffworkflow/examples.md
-spiffworkflow/process_instance.md
+:caption: Support
+spiffsparkles/suspend_resume_terminate.md
 ```
-
 ```{toctree}
 :maxdepth: 3
-:caption: In Depth Topics
-in_depth_topics/sub-processes_and_call_activities.md
-in_depth_topics/data_objects.md
-
-```
-
-```{toctree}
-:maxdepth: 3
-:caption: Installation and Integration
-installation_integration/admin_and_permissions.md
-installation_integration/permission_url.md
-
+:caption: SpiffSparkles
+spiffsparkles/find_a_process_instance.md
+spiffsparkles/navigate_to_an_active_process_instance.md
+spiffsparkles/suspend_resume_terminate.md
+spiffsparkles/complete_task_on_behalf_of_another_user.md
+spiffsparkles/assign_task_to_a_different_user.md
+spiffsparkles/process_instance.md
 ```
 
 ```{toctree}
 :maxdepth: 3
 :caption: Appendices
-appendices/bpmn_references.md
-glossary/glossary.md
+appendices/glossary.md
+appendices/articles.md
 learn_basics/bpmn_terminology.md
-
+documentation/documentation.md
+wish_list/wish_list.md
 ```
 
 ## Indices and tables
