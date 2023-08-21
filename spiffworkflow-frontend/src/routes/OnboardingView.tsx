@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import MDEditor from '@uiw/react-md-editor';
+import { useLocation, useNavigate } from 'react-router-dom';
 import HttpService from '../services/HttpService';
-import InProgressInstances from './InProgressInstances';
 import { Onboarding } from '../interfaces';
-import MyTasks from './MyTasks';
+import { objectIsEmpty } from '../helpers';
 
 export default function OnboardingView() {
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
-
+  const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,23 +18,35 @@ export default function OnboardingView() {
   }, [setOnboarding]);
 
   const onboardingElement = () => {
-    if (onboarding) {
-      if (onboarding.type === 'default_view') {
-        if (onboarding.value === 'my_tasks') {
-          return <MyTasks />;
-        }
-      } else if (
-        onboarding.type === 'user_input_required' &&
-        onboarding.process_instance_id &&
-        onboarding.task_id
-      ) {
-        navigate(
-          `/tasks/${onboarding.process_instance_id}/${onboarding.task_id}`
-        );
-      }
+    if (location.pathname.match(/^\/tasks\/\d+\/\b/)) {
+      return null;
     }
 
-    return <InProgressInstances />;
+    if (
+      onboarding &&
+      onboarding.type === 'user_input_required' &&
+      onboarding.process_instance_id &&
+      onboarding.task_id
+    ) {
+      navigate(
+        `/tasks/${onboarding.process_instance_id}/${onboarding.task_id}`
+      );
+    } else if (
+      onboarding &&
+      !objectIsEmpty(onboarding) &&
+      onboarding.instructions.length > 0
+    ) {
+      return (
+        <div data-color-mode="light">
+          <MDEditor.Markdown
+            className="onboarding"
+            linkTarget="_blank"
+            source={onboarding.instructions}
+          />
+        </div>
+      );
+    }
+    return null;
   };
 
   return onboardingElement();
