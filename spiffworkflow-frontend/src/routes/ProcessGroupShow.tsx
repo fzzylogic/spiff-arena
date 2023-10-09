@@ -32,6 +32,7 @@ import { usePermissionFetcher } from '../hooks/PermissionService';
 import ProcessGroupListTiles from '../components/ProcessGroupListTiles';
 import ButtonWithConfirmation from '../components/ButtonWithConfirmation';
 import ProcessModelListTiles from '../components/ProcessModelListTiles';
+import AddFile from '../components/AddFile';
 
 export default function ProcessGroupShow() {
   const params = useParams();
@@ -193,6 +194,9 @@ export default function ProcessGroupShow() {
               </Button>
             </Can>
           </Stack>
+          <br />
+          <br />
+	  {AddFile()}
           <br />
           <br />
           <ProcessModelListTiles
