@@ -32,6 +32,7 @@ import { Can } from '@casl/react';
 import ProcessBreadcrumb from '../components/ProcessBreadcrumb';
 import HttpService from '../services/HttpService';
 import useAPIError from '../hooks/UseApiError';
+import AddFile from '../components/AddFile';
 
 import {
   getGroupFromModifiedModelId,
@@ -668,7 +669,7 @@ export default function ProcessModelShow() {
                       processModel.bpmn_version_control_identifier &&
                       ` (revision ${processModel.bpmn_version_control_identifier})`}
                   </div>
-                  {addFileComponent()}
+                  {AddFile()}
                   <br />
                 </Can>
                 {processModelFileList()}

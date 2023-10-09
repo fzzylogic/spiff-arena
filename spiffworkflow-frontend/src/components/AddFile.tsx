@@ -1,57 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import {
-  Download,
-  Edit,
-  Favorite,
-  TrashCan,
-  Upload,
-  View,
-} from '@carbon/icons-react';
-import {
-  Button,
-  Column,
-  Dropdown,
-  FileUploader,
-  Grid,
-  Modal,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Tabs,
-  Tab,
-  TabList,
-  TabPanels,
-  TabPanel,
-} from '@carbon/react';
-import { Can } from '@casl/react';
-import ProcessBreadcrumb from '../components/ProcessBreadcrumb';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { Dropdown, FileUploader, Modal } from '@carbon/react';
 import HttpService from '../services/HttpService';
 import useAPIError from '../hooks/UseApiError';
 
-import {
-  getGroupFromModifiedModelId,
-  modifyProcessIdentifierForPathParam,
-  setPageTitle,
-} from '../helpers';
-import {
-  PermissionsToCheck,
-  ProcessFile,
-  ProcessInstance,
-  ProcessModel,
-} from '../interfaces';
-import ButtonWithConfirmation from '../components/ButtonWithConfirmation';
-import ProcessInstanceListTable from '../components/ProcessInstanceListTable';
-import { usePermissionFetcher } from '../hooks/PermissionService';
-import { useUriListForPermissions } from '../hooks/UriListForPermissions';
-import ProcessInstanceRun from '../components/ProcessInstanceRun';
-import { Notification } from '../components/Notification';
-import ProcessModelTestRun from '../components/ProcessModelTestRun';
-import MarkdownDisplayForFile from '../components/MarkdownDisplayForFile';
+import { modifyProcessIdentifierForPathParam } from '../helpers';
+import { ProcessModel } from '../interfaces';
 
 export default function AddFile() {
   const params = useParams();
@@ -71,7 +26,7 @@ export default function AddFile() {
   const onUploadedCallback = () => {
     setReloadModel(true);
   };
-  
+
   const [fileUploadEvent, setFileUploadEvent] = useState(null);
   const [duplicateFilename, setDuplicateFilename] = useState<String>('');
   const [showOverwriteConfirmationPrompt, setShowOverwriteConfirmationPrompt] =
@@ -195,10 +150,9 @@ export default function AddFile() {
     text: item,
   }));
 
-  const addFileComponent = () => {
-    return (
+  return (
     <>
-        {fileUploadModal()}
+      {fileUploadModal()}
       <Dropdown
         id="inline"
         titleText=""
@@ -232,9 +186,6 @@ export default function AddFile() {
         items={items}
         itemToString={(item: any) => (item ? item.text : '')}
       />
-      </>
-    );
-  };
-
-  return null;
+    </>
+  );
 }
