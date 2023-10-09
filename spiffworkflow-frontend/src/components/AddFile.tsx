@@ -153,6 +153,7 @@ export default function AddFile() {
   return (
     <>
       {fileUploadModal()}
+      {confirmOverwriteFileDialog()}
       <Dropdown
         id="inline"
         titleText=""

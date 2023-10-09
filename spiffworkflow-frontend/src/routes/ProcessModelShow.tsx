@@ -742,8 +742,6 @@ export default function ProcessModelShow() {
     );
     return (
       <>
-        {fileUploadModal()}
-        {confirmOverwriteFileDialog()}
         <ProcessBreadcrumb
           hotCrumbs={[
             ['Process Groups', '/process-groups'],
