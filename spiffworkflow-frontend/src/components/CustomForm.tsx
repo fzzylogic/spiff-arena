@@ -148,23 +148,23 @@ export default function CustomForm({
   // will not automatically fail validation. only undefined values will
   // trigger the validation by default so force it. this is to support things
   // like "I have read the EULA" type checkbox on a form.
-  const checkBooleanField = (
-    formDataToCheck: any,
-    propertyKey: string,
-    errors: any,
-    jsonSchema: any
-  ) => {
-    if (
-      jsonSchema.required &&
-      jsonSchema.required.includes(propertyKey) &&
-      formDataToCheck[propertyKey] !== true
-    ) {
-      // keep this error the same as the default message
-      errors[propertyKey].addError(
-        `must have required property '${propertyKey}'`
-      );
-    }
-  };
+  // const checkBooleanField = (
+  //   formDataToCheck: any,
+  //   propertyKey: string,
+  //   errors: any,
+  //   jsonSchema: any
+  // ) => {
+  //   if (
+  //     jsonSchema.required &&
+  //     jsonSchema.required.includes(propertyKey) &&
+  //     formDataToCheck[propertyKey] !== true
+  //   ) {
+  //     // keep this error the same as the default message
+  //     errors[propertyKey].addError(
+  //       `must have required property '${propertyKey}'`
+  //     );
+  //   }
+  // };
 
   const checkFieldsWithCustomValidations = (
     jsonSchema: any,
