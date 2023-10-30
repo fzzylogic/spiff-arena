@@ -20,13 +20,18 @@ function CheckboxWidget(props: WidgetProps) {
     required,
   } = props;
   const _onChange = (_: any, newValue: any) => {
-    // if this field is required and it is not checked then change the value to undefined
-    // otherwise rjsf will not flag this field as invalid
-    if (required && !newValue.checked) {
-      onChange(undefined);
-    } else {
-      onChange(newValue.checked);
-    }
+    // FIXME: put this code back once we know it's safe to release to prod.
+    // This is being commented out for backwards compatibility with old insntaces.
+    // When safe, we need to put this code back in place.
+    //
+    // // if this field is required and it is not checked then change the value to undefined
+    // // otherwise rjsf will not flag this field as invalid
+    // if (required && !newValue.checked) {
+    //   onChange(undefined);
+    // } else {
+    //   onChange(newValue.checked);
+    // }
+    onChange(newValue.checked);
   };
   const _onBlur = ({
     target: { value },
