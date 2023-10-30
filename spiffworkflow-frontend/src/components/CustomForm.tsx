@@ -190,14 +190,15 @@ export default function CustomForm({
           );
         }
 
-        if (propertyMetadata.type === 'boolean') {
-          checkBooleanField(
-            formDataToCheck,
-            propertyKey,
-            errors,
-            jsonSchemaToUse
-          );
-        }
+        // FIXME: see src/rjsf/carbon_theme/CheckboxWidget/CheckboxWidget.tsx
+        // if (propertyMetadata.type === 'boolean') {
+        //   checkBooleanField(
+        //     formDataToCheck,
+        //     propertyKey,
+        //     errors,
+        //     jsonSchemaToUse
+        //   );
+        // }
 
         // recurse through all nested properties as well
         let formDataToSend = formDataToCheck[propertyKey];
