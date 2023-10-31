@@ -65,9 +65,11 @@ function CheckboxWidget(props: WidgetProps) {
       invalidText={commonAttributes.errorMessageForField}
       helperText={commonAttributes.helperText}
       labelText={
-        required
-          ? commonAttributes.labelWithRequiredIndicator
-          : commonAttributes.label
+        // for now we are not going to show the required indicator
+        commonAttributes.label
+        // required
+        // ? commonAttributes.labelWithRequiredIndicator
+        // : commonAttributes.label
       }
       onChange={_onChange}
       onBlur={_onBlur}
