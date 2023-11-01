@@ -33,6 +33,7 @@ on:
       - main
       - spiffdemo
       - bugfixtest/test-purple-gateway-4201b73c5
+      - like-test-mod-20231101
 
 jobs:
   create_frontend_docker_image:
